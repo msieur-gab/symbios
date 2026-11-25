@@ -53,9 +53,10 @@ Everything below is run from the laptop, in this folder.
 
 1. **The card, the WiFi, the first login and the base layer**: follow `board/README.md`, steps 1 to 5. The card is
    written with your WiFi and your SSH key on it; SSH then takes keys only, a firewall leaves only SSH and the desk
-   open on the WiFi, and security updates install themselves. The image tested, Armbian community `26.11.0-trunk.83`,
-   is no longer offered by Armbian: take the newest *Orangepizero2w, trixie, current, minimal* image from
-   [armbian/community](https://github.com/armbian/community/releases) (expected to work, not yet tested).
+   open on the WiFi, and security updates install themselves. The image is the one SymbiOS was tested on, Armbian
+   community `26.11.0-trunk.83`: download it from this repository's
+   [release](https://github.com/msieur-gab/symbios/releases/tag/v0.1) (Armbian no longer offers it);
+   `write-card.sh` checks it before writing.
 2. **TermNL**:
    ```
    ssh <user>@<address> mkdir -p symbios-src
@@ -70,7 +71,8 @@ Everything below is run from the laptop, in this folder.
    ssh -t <user>@<address> sudo COMPANION=https://<your companion> symbios-board/install-desk.sh symbios-src/desk
    ```
    It installs the kiosk browser and downloads the speech and search models (about 300 MB, from their own
-   sources), so give it time. Run it again to update; the address is remembered.
+   sources), so give it time. Run it again to update; the address is remembered. The same models are kept in the
+   release too, in case a source vanishes.
 4. **Claim it.** The board's HDMI screen, or a laptop's browser on the USB cable at `http://10.55.0.1`, shows a QR
    code. Scan it with the phone: it opens your companion, which claims the board. From then on the board answers
    your phone only, and every screen stays locked until your phone allows it. `desk/FIRST-USE.md` tells the rest:
@@ -87,8 +89,8 @@ Everything below is run from the laptop, in this folder.
 - The board's user can still become root with its password; the programs themselves are installed read-only, and
   TermNL only runs what its skill files allow.
 - Mesh stops until the desk restarts if a malformed packet arrives from the mesh.
-- The installers download what they need from Debian, PyPI, GitHub and Hugging Face; the board image is a nightly
-  build that Armbian replaces often.
+- The installers download what they need from Debian, PyPI, GitHub and Hugging Face; the board image and the
+  models are kept in the release, in case those sources change.
 - A deploy guide for the Lyra in this repository's layout, a one-command install and ready-made card images are to
   come.
 

@@ -43,15 +43,28 @@ rsync -a --delete --chown=root:root --chmod=go-w \
   --exclude '*.pdf' --exclude '*.pptx' --exclude 'voice memo' --exclude 'HANDOVER*' --exclude 'Pitch.txt' \
   "$SRC/" "$OPT/"
 install -m 0644 "$SRC/board/lyra/desk.conf" "$OPT/desk.conf"
-# The companion, the phone's page: the address of the person's own copy (README, "The companion"), given once as
-#     COMPANION="https://<its address>" on this command's line; kept in /etc/symbios/companion for the next installs.
-# Without it, desk.conf's own line stays.
+# This board's own settings: /etc/symbios/desk.conf, "name = value" lines that replace desk.conf's (or are added),
+# kept across installs and updates. COMPANION="https://<its address>" on this command's line writes the companion's
+# (the phone's page, README "The companion"); edit the file by hand for the rest, then run this again.
+LOCAL=/etc/symbios/desk.conf
+setting() {  # setting <name> <value>: into LOCAL, replacing the name's line
+  install -d -m 0755 /etc/symbios; touch "$LOCAL"
+  sed -i "/^$1 = /d" "$LOCAL"; echo "$1 = $2" >> "$LOCAL"
+}
 if [ -n "${COMPANION:-}" ]; then
   [[ "$COMPANION" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?(\ https://[A-Za-z0-9.-]+(:[0-9]+)?)*$ ]] \
     || { echo "COMPANION: one or more https:// addresses, with no path (https://my-companion.example.org)"; exit 1; }
-  install -d -m 0755 /etc/symbios && echo "$COMPANION" > /etc/symbios/companion
+  setting companion "$COMPANION"
 fi
-[ -s /etc/symbios/companion ] && sed -i "s#^companion = .*#companion = $(cat /etc/symbios/companion)#" "$OPT/desk.conf"
+if [ -s "$LOCAL" ]; then
+  while IFS= read -r line; do
+    [[ "$line" =~ ^([a-z_]+)\ =\ (.*)$ ]] || continue
+    name=${BASH_REMATCH[1]}; value=${BASH_REMATCH[2]}
+    if grep -q "^$name = " "$OPT/desk.conf"; then sed -i "s#^$name = .*#$name = $value#" "$OPT/desk.conf"
+    else echo "$name = $value" >> "$OPT/desk.conf"; fi
+  done < "$LOCAL"
+  echo "   this board's settings ($LOCAL): $(grep -c ' = ' "$LOCAL")"
+fi
 echo "   companion: $(sed -n 's/^companion = //p' "$OPT/desk.conf")"
 grep -q '^companion = none' "$OPT/desk.conf" \
   && echo "   no companion yet: run this again with COMPANION=\"https://<your companion's address>\" (README)"

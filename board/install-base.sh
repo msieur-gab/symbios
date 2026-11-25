@@ -99,6 +99,7 @@ XDG_VIDEOS_DIR="$HOME/Videos"
 DIRS
 chown "$USER_NAME:$USER_NAME" "$USER_HOME/.config/user-dirs.dirs"
 
-echo "== what the security updates would install now (a dry run, nothing installed)"
-unattended-upgrade --dry-run --verbose 2>&1 | grep -iE "^(Packages that will be upgraded|No packages found)" || echo "   (no answer from unattended-upgrade)"
+# (a dry run of the updates was here: on a 1.5 GB board it ran over 7 minutes after printing its list, and looked
+# stuck; the blank-card run, 25 Nov. Gab: "I find it extremely long". The timer below says they are on.)
+echo "== the automatic security updates: $(systemctl is-enabled apt-daily-upgrade.timer 2>/dev/null || echo off), next $(systemctl show apt-daily-upgrade.timer -p NextElapseUSecRealtime --value 2>/dev/null)"
 echo "== done: base layer of $NAME ($(hostname -I | cut -d' ' -f1))"
