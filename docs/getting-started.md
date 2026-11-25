@@ -15,7 +15,7 @@ at step 7.
 
 - An **Orange Pi Zero 2W** (1 GB to 4 GB; tested on 1.5 GB and 2 GB) and its power supply (USB-C, 5 V 3 A).
 - A **microSD card**, 16 GB or more. Everything on it will be erased.
-- A **laptop running Linux** with a **USB card reader**.
+- A **computer running Linux** with a **USB card reader**. (Writing the card needs Linux: the board's system is on a Linux-format partition that macOS and Windows can't write to. A ready-made image for any computer is coming.)
 - A **USB-C cable that carries data** (not a charge-only cable), for the claim at the end.
 - A **phone**: Android with Chrome is tested; another browser worked too, in a phone's private space. iPhones are
   not tested yet.

@@ -12,6 +12,8 @@ laptop over a USB cable, your phone. Your files stay on the board: no account, n
 > laptop, SSH and about an hour. Read "Known limits" before you put your own files on it.
 >
 > **Installed from a blank card by following its guide** on 25 Nov 2026; a second run with the final guide is next.
+>
+> **→ To install it: [docs/getting-started.md](docs/getting-started.md)**, step by step.
 
 ## What is inside
 
@@ -30,7 +32,7 @@ laptop over a USB cable, your phone. Your files stay on the board: no account, n
 | **Luckfox Lyra Zero W** (464 MB), Luckfox's Ubuntu image | runs it all, slower; no screen, no sound, WiFi or Bluetooth but not both (a limit of its chip). For the adventurous: `board/lyra/README.md`. |
 | **Raspberry Pi** | not yet: it is next. |
 
-You also need a microSD card (16 GB or more), a laptop running Linux with a card reader, a USB-C cable that carries
+You also need a microSD card (16 GB or more), a computer running Linux with a card reader (macOS and Windows: see below), a USB-C cable that carries
 data, and an **Android phone with Chrome** (iPhones are not tested yet).
 
 ## The companion: host your own
@@ -77,8 +79,11 @@ written from a real install from a blank card. In short, from a laptop running L
 - Mesh stops until the desk restarts if a malformed packet arrives from the mesh.
 - The installers download what they need from Debian, PyPI, GitHub and Hugging Face; the board image and the
   models are kept in the release, in case those sources change.
-- A deploy guide for the Lyra in this repository's layout, a one-command install and ready-made card images are to
-  come.
+- **Writing the card needs Linux**: the board's system is on a Linux-format (ext4) partition, where the WiFi and your
+  key are put before its first start, and macOS and Windows can't write to it. After the card, everything works from
+  macOS (ssh, rsync and git are built in) or Windows (with WSL). A ready-made SymbiOS image, written with balenaEtcher
+  from any computer, is the next step.
+- A deploy guide for the Lyra in this repository's layout is to come.
 
 ## Credits and licence
 
