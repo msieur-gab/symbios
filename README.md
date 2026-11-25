@@ -73,8 +73,10 @@ hidden folder, `~/.symbios-install`, so they never show among your files; your W
    ```
 3. **The desk**, with your companion's address:
    ```
-   ssh -t <user>@<address> sudo COMPANION=https://<your companion> .symbios-install/board/install-desk.sh .symbios-install/desk
+   ssh -t <user>@<address> 'sudo COMPANION="https://<your companion>" .symbios-install/board/install-desk.sh .symbios-install/desk'
    ```
+   Keep the outer single quotes: they carry the address to the board whole (two addresses, separated by a space,
+   need them; the first is the one the QR code opens).
    It installs the kiosk browser and downloads the speech and search models (about 300 MB, from their own
    sources), so give it time. Run it again to update; the address is remembered. The same models are kept in the
    release too, in case a source vanishes.
