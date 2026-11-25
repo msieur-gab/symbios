@@ -11,7 +11,7 @@ laptop over a USB cable, your phone. Your files stay on the board: no account, n
 > **An early preview, for builders.** It runs every day on two boards, and it is still young: installing takes a
 > laptop, SSH and about an hour. Read "Known limits" before you put your own files on it.
 >
-> **This guide is being tested from a blank card; until then, expect rough edges.**
+> **Installed from a blank card by following its guide** on 25 Nov 2026; a second run with the final guide is next.
 
 ## What is inside
 
@@ -26,7 +26,7 @@ laptop over a USB cable, your phone. Your files stay on the board: no account, n
 
 | Board | State |
 |---|---|
-| **Orange Pi Zero 2W** (2 GB), Armbian | the main board: HDMI kiosk, sound, Bluetooth, the USB cable to a phone or a laptop. Guide below. |
+| **Orange Pi Zero 2W**, Armbian | the main board: HDMI kiosk, sound, Bluetooth, the USB cable to a phone or a laptop. **Tested and working on the 1.5 GB and the 2 GB models** (memory): the 2 GB runs every day since October, the 1.5 GB was installed from a blank card with the guide; the installer lowers the heavy jobs' limits by itself under 1.8 GB. Guide below. |
 | **Luckfox Lyra Zero W** (464 MB), Luckfox's Ubuntu image | runs it all, slower; no screen, no sound, WiFi or Bluetooth but not both (a limit of its chip). For the adventurous: `board/lyra/README.md`. |
 | **Raspberry Pi** | not yet: it is next. |
 
@@ -56,35 +56,14 @@ Never delete that site while your board names it: someone else could take the fr
 
 ## Installing on an Orange Pi Zero 2W
 
-Everything below is run from the laptop, in this folder. The installers and the code are copied to the board into a
-hidden folder, `~/.symbios-install`, so they never show among your files; your WiFi file is never copied.
+**Follow [docs/getting-started.md](docs/getting-started.md)**: every command, what you will see and what to answer,
+written from a real install from a blank card. In short, from a laptop running Linux:
 
-1. **The card, the WiFi, the first login and the base layer**: follow `board/README.md`, steps 1 to 5. The card is
-   written with your WiFi and your SSH key on it; SSH then takes keys only, a firewall leaves only SSH and the desk
-   open on the WiFi, and security updates install themselves. The image is the one SymbiOS was tested on, Armbian
-   community `26.11.0-trunk.83`: download it from this repository's
-   [release](https://github.com/msieur-gab/symbios/releases/tag/v0.1) (Armbian no longer offers it);
-   `write-card.sh` checks it before writing.
-2. **TermNL**:
-   ```
-   rsync -a --delete --exclude .git --exclude netplan ./ <user>@<address>:.symbios-install/
-   ssh -t <user>@<address> sudo .symbios-install/board/install-termnl.sh .symbios-install/termnl
-   ssh <user>@<address> termnl how much space is left
-   ```
-3. **The desk**, with your companion's address:
-   ```
-   ssh -t <user>@<address> 'sudo COMPANION="https://<your companion>" .symbios-install/board/install-desk.sh .symbios-install/desk'
-   ```
-   Keep the outer single quotes: they carry the address to the board whole (two addresses, separated by a space,
-   need them; the first is the one the QR code opens).
-   It installs the kiosk browser and downloads the speech and search models (about 300 MB, from their own
-   sources), so give it time. Run it again to update; the address is remembered. The same models are kept in the
-   release too, in case a source vanishes.
-4. **Claim it.** The board's HDMI screen, or a laptop's browser on the USB cable at `http://10.55.0.1`, shows a QR
-   code. Scan it with the phone: it opens your companion, which claims the board. From then on the board answers
-   your phone only, and every screen stays locked until your phone allows it. `desk/FIRST-USE.md` tells the rest:
-   the secret word that takes the board back if you lose your phone, and giving it a WiFi (it still describes the
-   older claim with the phone on the cable, which also works on the Orange Pi).
+1. Write the tested Armbian image to the card with your WiFi and SSH key (`board/write-card.sh`).
+2. Start the board, find it on your WiFi, answer Armbian's first-login questions.
+3. Copy SymbiOS to the board and install its three layers: the base, TermNL, the desk.
+4. Host your companion (GitHub Pages or Netlify), give its address to the desk's installer.
+5. Plug the USB cable, open `http://10.55.0.1`, scan the QR code with your phone: the board is yours.
 
 ## Known limits
 
