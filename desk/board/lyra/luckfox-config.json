@@ -1,0 +1,9 @@
+{
+  "SPI0": {
+    "CS_RM_IO": "10",
+    "MOSI_RM_IO": "6",
+    "SCLK_RM_IO": "8",
+    "SPEED": "4000000",
+    "STATUS": "1"
+  }
+}

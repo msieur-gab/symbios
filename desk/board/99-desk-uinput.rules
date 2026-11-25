@@ -1,0 +1,3 @@
+# desk-bluetooth makes a mouse out of the phone's trackpad: the input group (which the desk's user
+# is in) may create input devices, without root
+KERNEL=="uinput", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"

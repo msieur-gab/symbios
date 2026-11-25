@@ -1,0 +1,2 @@
+# start or stop the desk kiosk when an HDMI screen is plugged in or out
+ACTION=="change", SUBSYSTEM=="drm", ENV{HOTPLUG}=="1", RUN+="/usr/local/sbin/desk-hdmi-hotplug.sh"

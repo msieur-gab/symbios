@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- no script but the desk's own files, no plugins, no <base> (symbios SECURITY.md, review of 24 Nov, C2) -->
+<meta http-equiv="Content-Security-Policy" content="script-src 'self'; object-src 'none'; base-uri 'none'">
+<title>SymbiOS</title>
+<!-- the design system: theme (colour) · tokens (every value) · components · shell · apps (design.html shows it) -->
+<link rel="stylesheet" href="css/theme.css">
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/components.css">
+<link rel="stylesheet" href="css/shell.css">
+<link rel="stylesheet" href="css/apps.css">
+</head>
+<body>
+<!-- the desktop stays clean: no folders, no files on it (Gab, 23 Nov); a drop on it is placed by the rulebook -->
+<div id="desktop"></div>
+<div id="dim"></div>
+<div id="hot-hint"></div>
+<div id="snap-prev"></div>
+
+<!-- OVERVIEW: the four desktops -->
+<div id="ov"><h2>Desktops</h2><div class="ov-row" id="ov-row"></div></div>
+
+<!-- LAUNCHER: the apps as tiles, then the home's folders as a list, each part under its heading -->
+<div id="launcher">
+  <input id="launch-search" placeholder="Search apps and folders…" autocomplete="off">
+  <section class="lpart" id="launch-apps"><h2 class="eyebrow">Apps</h2><div class="lg" id="launch-grid"></div></section>
+  <section class="lpart" id="launch-home"><h2 class="eyebrow">In your home</h2><div class="lplaces" id="launch-places"></div></section>
+  <section class="lpart" id="launch-files" hidden><h2 class="eyebrow">Files</h2><div class="lfound" id="launch-found"></div></section>
+  <p class="lpart muted" id="launch-none" hidden>Nothing by that name.</p>
+</div>
+
+<!-- LOCK: the desk locked from the quick panel -->
+<div id="lockscreen" hidden></div>
+
+<!-- QUICK PANEL behind the clock -->
+<div id="qs"></div>
+
+<!-- CONTEXT MENU of a window -->
+<div id="ctx"></div>
+
+<!-- DOCK: three islands, as SymbiOS v1 -->
+<div class="island" id="dock-left">
+  <button class="tile launcher" id="launcher-btn" data-tip="Apps" aria-label="Apps"><span class="glyph"></span></button>
+  <div class="dock-sep"></div>
+  <div class="pager" id="pager"></div>
+  <button class="tile overview" id="overview-btn" data-tip="Overview" aria-label="Overview"><span class="glyph"></span></button>
+</div>
+<div class="island" id="dock-center"><div class="dock-apps" id="dock-apps"></div></div>
+<div class="island" id="dock-right">
+  <!-- what is playing: a tap brings the Player back (the desk's and v1's chip) -->
+  <button class="nowchip" id="nowchip" aria-label="Now playing"><span class="eq" id="chip-eq"><i></i><i></i><i></i></span><span class="ttl" id="chip-ttl">—</span></button>
+  <!-- the board at work (a memo transcribed, an article made searchable…): a tap opens Activity -->
+  <button class="workchip" id="workchip" aria-label="Activity" hidden><span class="glyph"></span></button>
+  <button class="tray" id="tray-btn" aria-label="Quick settings" title="Quick settings">
+    <span id="tray-mesh" class="tray-ic" hidden></span><span id="tray-bt" class="tray-ic" hidden></span><span id="tray-hot" class="tray-ic" hidden></span><span id="tray-wifi" class="tray-ic"></span>
+    <span class="clock"><span id="clk-time">--:--</span><small id="clk-date">—</small></span>
+  </button>
+</div>
+
+<div id="drop-panel" hidden></div>
+<div id="toast" hidden></div>
+<!-- gate.js first: a screen the owner's phone hasn't allowed sees the lock screen, and the desk (main.js) stays unloaded -->
+<script type="module" src="js/gate.js"></script>
+</body>
+</html>

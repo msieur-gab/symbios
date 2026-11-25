@@ -1,0 +1,47 @@
+---
+does: rename folder
+label: rename a folder
+admin: no
+approve: no
+---
+
+A new name never replaces a folder or a file that is already there.
+
+## People say
+
+- rename (the/my) (folder) {folder} (folder) to/as/into {new}
+- rename (a/the/this/that) folder
+
+## Also said
+
+- rename a folder
+- rename the ideas folder to projects
+- change the name of the downloads folder
+- give the projects folder a new name
+- the ideas folder needs another name
+- rename folder documents
+- call the ideas folder projects instead
+- i want to rename a directory
+- rename the downloads folder to inbox
+- can you change the ideas folder's name to sketches
+- rename projects
+- I'd like the documents folder to be called papers
+- is there a way to rename my ideas folder
+- relabel the projects folder as work
+- the name downloads is confusing, rename that folder to incoming
+- I'm reorganising, call the ideas folder drafts from now on
+
+## What it needs
+
+- {folder}: a folder on the device. If it's missing, ask: Which folder? | Which folder should I rename?
+- {new}: a new name. If it's missing, ask: What should it be called? | What's the new name?
+- {parent}: a folder on the device. If it's not said: the folder {folder} is in.
+
+## Command
+
+mv -nT {folder} {parent}/{new}
+
+## Replies
+
+- approve: Rename the folder {folder} to {new}?
+- done: Done, {folder} is now {new}. | Renamed the folder {folder} to {new}.

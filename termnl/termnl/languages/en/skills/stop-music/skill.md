@@ -1,0 +1,40 @@
+---
+does: stop music
+label: stop the music
+admin: no
+approve: no
+---
+
+"stop" alone is a no (conversation.md): the music is named, or "stop playing".
+
+## Words
+
+- turn off, switch off, shut off, end → stop
+- track: turn off, switch off, shut off, end → stop
+
+## People say
+
+- stop (the/my/this) music/track
+- stop playing (music)
+
+## Also said
+
+- no more music
+- that's enough music
+- end the music
+- music off
+- stop the song please
+- can you stop playing that song
+- cut the music please
+- i'd like the music to stop now
+- i'm going to bed, stop the music
+- i have a call coming in, stop playing music
+- enough music
+
+## Command
+
+mpc stop
+
+## Replies
+
+- done: Stopped. | The music is stopped.

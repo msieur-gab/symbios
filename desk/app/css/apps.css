@@ -1,0 +1,136 @@
+/* apps.css — the file explorer, taken from symbios (app/desktop/css/apps.css), unchanged. */
+.explorer { display: flex; flex-direction: column; height: 100%; background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 14px; }
+.explorer .bar { display: flex; align-items: center; gap: 6px; padding: 6px; border-bottom: 1px solid var(--fg); }
+.explorer .bar button { background: var(--bg); color: var(--fg); border: 1px solid var(--fg); padding: 3px 9px; cursor: pointer; font-size: 14px; font-family: var(--font); }
+.explorer .bar button:hover { background: var(--fg); color: var(--bg); }
+.explorer .bar .path { flex: 1; font-size: 12px; opacity: .7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.explorer .cols { flex: 1; display: flex; min-height: 0; }
+.explorer .list { flex: 1; overflow: auto; border-right: 1px solid var(--fg); }
+.explorer .item { display: flex; align-items: center; gap: 8px; padding: 4px 10px; cursor: pointer; }
+.explorer .item:hover { background: var(--fg); color: var(--bg); }
+.explorer .item .ic { width: 12px; text-align: center; }
+.explorer .item .nm { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.explorer .item .sz { opacity: .6; font-size: 12px; }
+.explorer .item:hover .sz { opacity: .9; }
+.explorer .view { flex: 1.3; display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
+.explorer .vhead { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--fg); }
+.explorer .vhead .vname { flex: 1; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.explorer .vhead .dl { background: var(--bg); color: var(--fg); border: 1px solid var(--fg); padding: 3px 11px; cursor: pointer; font-size: 13px; font-family: var(--font); }
+.explorer .vhead .dl:disabled { opacity: .35; cursor: default; }
+.explorer .vhead .dl:not(:disabled):hover { background: var(--fg); color: var(--bg); }
+.explorer .vbody { flex: 1; overflow: auto; }
+.explorer .vbody pre { margin: 0; padding: 10px; white-space: pre-wrap; word-break: break-word; font-family: var(--font); font-size: 13px; color: var(--fg); }
+.explorer .vbody img { max-width: 100%; display: block; padding: 10px; image-rendering: pixelated; }
+.explorer .vbody .msg { padding: 14px; opacity: .7; }
+
+/* the text editor, taken from symbios (app/desktop/css/base.css), unchanged */
+.editor{width:100%;height:100%;border:0;outline:none;resize:none;padding:18px;font-family:var(--mono);
+  font-size:14px;line-height:1.6;background:transparent;color:var(--fg)}
+
+/* the music player, taken from symbios (app/desktop/css/apps.css), unchanged */
+.music { display: flex; flex-direction: column; height: 100%; background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 14px; }
+.music .bar { display: flex; align-items: center; gap: 6px; padding: 6px; border-bottom: 1px solid var(--fg); }
+.music .bar button { background: var(--bg); color: var(--fg); border: 1px solid var(--fg); padding: 3px 9px; cursor: pointer; font-family: var(--font); font-size: 14px; }
+.music .bar button:hover { background: var(--fg); color: var(--bg); }
+.music .bar input { flex: 1; min-width: 0; background: var(--bg); color: var(--fg); border: 1px solid var(--fg); padding: 4px 8px; font-family: var(--font); font-size: 12px; outline: none; }
+.music .list { flex: 1; overflow: auto; }
+.music .item { display: flex; align-items: center; gap: 8px; padding: 5px 10px; cursor: pointer; }
+.music .item:hover { background: var(--fg); color: var(--bg); }
+.music .item.playing { background: var(--fg); color: var(--bg); }
+.music .item .ic { width: 12px; text-align: center; }
+.music .item .nm { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.music .empty { padding: 14px; opacity: .7; }
+.music .player { border-top: 1px solid var(--fg); padding: 9px 10px; }
+.music .player .phead { display: flex; gap: 10px; align-items: center; }
+.music .player .pmeta { flex: 1; min-width: 0; }
+.music .player .cover { width: 96px; height: 96px; flex: 0 0 auto; border: 1px solid var(--fg); background: var(--bg); image-rendering: pixelated; display: none; }
+.music .player .cover.show { display: block; }
+.music .player .now { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 7px; }
+.music .player .ctrls { display: flex; align-items: center; gap: 7px; }
+.music .player .ctrls button { background: var(--bg); color: var(--fg); border: 1px solid var(--fg); padding: 3px 10px; cursor: pointer; font-family: var(--font); font-size: 13px; }
+.music .player .ctrls button:hover { background: var(--fg); color: var(--bg); }
+.music .player .time { margin-left: auto; font-size: 12px; opacity: .7; }
+.music .player .seek { height: 10px; border: 1px solid var(--fg); margin-top: 9px; cursor: pointer; position: relative; }
+.music .player .seek .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0%; background: var(--fg); }
+
+/* the video player: the music player's look; the list gives way to the picture while a film is on */
+.video .screen { display: none; flex: 1; min-height: 0; width: 100%; background: #000; object-fit: contain; }
+.video.watching .screen { display: block; }
+.video.watching .list { display: none; }
+.video .player .now { margin-bottom: 7px; }
+/* full screen: the window over the desk and the dock (9200), under the brightness veil (9999); body … so it
+   wins over a maximised window's size (desk.css, loaded after) */
+body desk-window.win.full-screen { position: fixed; left: 0 !important; top: 0 !important; width: 100% !important; height: 100% !important; z-index: 9500 !important; border: 0; border-radius: 0; resize: none; }
+desk-window.win.full-screen .win-head, .video.full .bar { display: none; }
+/* #desktop is fixed, so no window inside it can rise above the dock: the dock steps aside instead */
+body.full-screen .island { display: none; }
+.video.full { position: relative; background: #000; }
+.video.full .player { position: absolute; left: 0; right: 0; bottom: 0; background: var(--bg); display: none; }
+.video.full.show .player { display: block; }
+
+/* slides: the music player's list; a deck on show takes the whole screen (full-screen, as Video), the pointer hidden until it moves */
+.slides .stage, .slides .bar button { display: none; }
+.slides.on .bar button { display: block; }
+.slides.on .list { display: none; }
+.slides.on .stage { display: block; position: relative; flex: 1; min-height: 0; background: #000; }
+.slides.full { position: relative; background: #000; cursor: none; }
+.slides.full.pointing { cursor: default; }
+.slides.full .bar { display: none; }
+.slides.full .stage { position: absolute; inset: 0; }
+.slides .slide { width: 100%; height: 100%; object-fit: contain; display: block; }
+.slides .black { position: absolute; inset: 0; background: #000; display: none; }
+.slides.blacked .black { display: block; }
+
+/* now-playing chip */
+.nowchip{display:none;align-items:center;gap:8px;border:0;cursor:pointer;color:var(--fg);
+  background:var(--hair);border-radius:9px;padding:6px 11px;max-width:170px}
+.nowchip.show{display:flex}
+.nowchip .ttl{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.eq{display:flex;gap:2px;align-items:flex-end;height:14px;flex:0 0 auto}
+.eq i{width:3px;background:var(--accent);border-radius:1px;height:14px;transform-origin:bottom;transform:scaleY(.4)}
+/* Equalizer animation DISABLED for thermal reasons: with no GPU, a continuous
+   animation forces the software compositor to re-rasterize ~60x/s (~15% CPU,
+   ~3-5°C) the whole time music plays. Static bars read as "playing" at zero
+   repaint cost. To restore the bounce, uncomment the three lines below.
+.eq.play i{animation:eq .9s ease-in-out infinite;will-change:transform}
+.eq.play i:nth-child(2){animation-delay:.25s}.eq.play i:nth-child(3){animation-delay:.5s}
+@keyframes eq{0%,100%{transform:scaleY(.3)}50%{transform:scaleY(1)}}
+*/
+/* static "frozen equalizer" — varied bar heights so it still signals playback */
+.eq.play i:nth-child(1){transform:scaleY(.55)}
+.eq.play i:nth-child(2){transform:scaleY(1)}
+.eq.play i:nth-child(3){transform:scaleY(.7)}
+
+/* ---- Reader: taken from symbios (apps.css), unchanged ---- */
+.reader { display: flex; flex-direction: column; height: 100%; background: var(--bg); color: var(--fg); font-family: var(--font); }
+.reader .bar { display: flex; gap: 6px; padding: 6px; border-bottom: 1px solid var(--fg); }
+.reader .bar input { flex: 1; min-width: 0; background: var(--bg); color: var(--fg); border: 1px solid var(--fg); padding: 4px 8px; font-family: var(--font); font-size: 13px; outline: none; }
+.reader .bar button { background: var(--bg); color: var(--fg); border: 1px solid var(--fg); padding: 0 10px; cursor: pointer; font-family: var(--font); font-size: 14px; }
+.reader .bar button:hover { background: var(--fg); color: var(--bg); }
+.reader .bar select { background: var(--bg); color: var(--fg); border: 1px solid var(--fg); padding: 0 4px; font-family: var(--font); font-size: 12px; cursor: pointer; outline: none; }
+.reader .body { flex: 1; display: flex; min-height: 0; }
+.reader .sidebar { width: 0; overflow: hidden; flex: 0 0 auto; transition: width .12s ease; }
+.reader.sidebar-open .sidebar { width: 230px; overflow: auto; border-right: 1px solid var(--fg); padding: 10px; }
+.reader .sidebar h3 { font-weight: 400; font-size: 11px; opacity: .7; letter-spacing: 1px; margin: 2px 0 8px; }
+.reader .sidebar a { display: block; position: relative; padding: 6px 24px 6px 8px; border: 1px solid var(--fg); margin-bottom: 6px; color: var(--fg); text-decoration: none; cursor: pointer; font-size: 12px; }
+.reader .sidebar a:hover { background: var(--fg); color: var(--bg); }
+.reader .sidebar a .u { opacity: .55; font-size: 10px; word-break: break-all; }
+.reader .sidebar a .del { position: absolute; top: 4px; right: 4px; background: var(--bg); color: var(--fg); border: 1px solid var(--fg); font-family: var(--font); font-size: 10px; line-height: 1; padding: 2px 4px; cursor: pointer; }
+.reader .sidebar a .del:hover { background: var(--fg); color: var(--bg); }
+.reader .doc { flex: 1; overflow: auto; padding: 18px 22px; }
+.reader .inner { max-width: 62ch; margin: 0 auto; font-size: 15px; line-height: 1.6; }
+.reader .inner h1 { font-size: 20px; font-weight: 400; margin: 0 0 14px; }
+.reader .inner h2, .reader .inner h3 { font-size: 16px; font-weight: 400; margin: 18px 0 6px; }
+.reader .inner p { margin: 0 0 12px; }
+.reader .inner a { color: var(--fg); text-decoration: underline; cursor: pointer; }
+.reader .inner a:hover { background: var(--fg); color: var(--bg); text-decoration: none; }
+.reader .inner img, .reader .inner canvas { max-width: 100%; height: auto; display: block; margin: 12px 0; image-rendering: pixelated; }
+.reader .inner ul, .reader .inner ol { margin: 0 0 12px; padding-left: 22px; }
+.reader .home h3 { font-weight: 400; font-size: 12px; opacity: .7; letter-spacing: 1px; margin: 0 0 10px; }
+.reader .home a { display: block; padding: 8px 10px; border: 1px solid var(--fg); margin-bottom: 7px; color: var(--fg); text-decoration: none; cursor: pointer; }
+.reader .home a:hover { background: var(--fg); color: var(--bg); }
+.reader .home a { position: relative; }
+.reader .home a .u { opacity: .6; font-size: 12px; }
+.reader .home a .del { position: absolute; top: 50%; right: 8px; transform: translateY(-50%); background: var(--bg); color: var(--fg); border: 1px solid var(--fg); font-family: var(--font); font-size: 12px; line-height: 1; padding: 3px 6px; cursor: pointer; }
+.reader .home a .del:hover { background: var(--fg); color: var(--bg); }
+.reader .status { padding: 18px; opacity: .7; }

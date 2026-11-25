@@ -1,0 +1,21 @@
+[Unit]
+Description=the desk, SymbiOS's face: the page, the files and the phone's door, on top of TermNL
+After=network.target user@__UID__.service termnl.service
+Wants=termnl.service
+
+[Service]
+User=__USER__
+WorkingDirectory=/opt/symbios/desk
+Environment=XDG_RUNTIME_DIR=/run/user/__UID__
+# the program in /opt is read-only: no bytecode written there (install-desk.sh compiles it once)
+Environment=PYTHONDONTWRITEBYTECODE=1
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+# the Assistant is TermNL's own service, below, on its socket: waited for at boot (up to 30 s), since TermNL makes its
+# socket a few seconds after it starts (31 Oct: the desk started first and stopped once)
+ExecStartPre=/bin/sh -c 'for i in $(seq 30); do [ -S /run/symbios/termnl.sock ] && exit 0; sleep 1; done; exit 1'
+ExecStart=/usr/bin/python3 /opt/symbios/desk/server.py --home __HOME__ --termnl /run/symbios/termnl.sock --allow all --shell 127.0.0.0/8,10.55.0.0/24 --port 80
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

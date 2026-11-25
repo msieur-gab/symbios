@@ -1,0 +1,48 @@
+---
+does: check time
+label: check the time
+reads: clock
+admin: no
+approve: no
+---
+
+Gab, 22 Oct: "what time is it?" (four times), "what is the date today". On a board the time is a fact
+about the machine: without a clock battery, it can be wrong after a power cut.
+
+## People say
+
+- what time is it (now)
+- what's the time/date/day (today/now)
+- what is the time/date/day (today/now)
+- what day/date is it (today)
+- what's today's date
+- what is today's date
+- check (the) time
+
+## Also said
+
+- which day are we
+- what day are we today
+- the time
+- time please
+- tell me the time
+- check the time
+- do you know what time it is
+- what's today
+- can you tell me the date
+- what day of the week is it
+- what's the date, I need it for a form
+- is it morning or afternoon right now
+
+## When it's fine
+
+- It's {@sys.clock}, {@sys.clock.day} {@sys.clock.date}.
+- {@sys.clock} on {@sys.clock.day} {@sys.clock.date}.
+
+## When it's unsure
+
+- It's {@sys.clock}, {@sys.clock.day} {@sys.clock.date}, as far as I know: my clock hasn't been set from a time server, so it may be a little off.
+
+## When it's wrong
+
+- My clock says {@sys.clock.date}, which can't be right: it was probably reset when the power went off. It usually sets itself again once the board is online.

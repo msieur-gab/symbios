@@ -1,0 +1,13 @@
+{
+  "shut down system": "sudo -n /usr/bin/systemctl poweroff",
+  "restart system": "sudo -n /usr/bin/systemctl reboot",
+  "restart service": "bash -c 'if [ \"$1\" = termnl ] || [ \"$1\" = desk ]; then sudo -n /usr/bin/systemd-run --on-active=2 /usr/bin/systemctl restart \"$1\" >/dev/null; else sudo -n /usr/bin/systemctl restart \"$1\"; fi' _ {name}",
+  "show wifi": "iw dev wlan0 link; sudo -n /usr/local/sbin/symbios-wifi scan",
+  "connect wifi": {
+    "command": "sudo -n /usr/local/sbin/symbios-wifi add {network} | /usr/local/lib/symbios/symbios-wifi-said {network}",
+    "replies": {
+      "done": "{output}",
+      "approve": "Save {network} on the board? It joins the known network in range."
+    }
+  }
+}

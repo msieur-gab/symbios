@@ -1,0 +1,16 @@
+[Unit]
+# Luckfox's wiki (Lyra Zero W, WIFI & Bluetooth): the external antenna by default; "To switch to the onboard chip
+# antenna, simply pull up GPIO pin 55", lost at each reboot. No antenna plugged in (Gab, 24 Nov): the on-board one,
+# set before the image's wifibt-init loads the WiFi and Bluetooth chip (WiFi -56 → -39 dBm when switched, 24 Nov)
+Description=symbios: the Lyra's on-board antenna (GPIO 55 high)
+DefaultDependencies=no
+After=local-fs.target
+Before=wifibt-init.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c '[ -d /sys/class/gpio/gpio55 ] || echo 55 > /sys/class/gpio/export; echo out > /sys/class/gpio/gpio55/direction; echo 1 > /sys/class/gpio/gpio55/value'
+
+[Install]
+WantedBy=sysinit.target

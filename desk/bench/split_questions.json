@@ -1,0 +1,17 @@
+{
+  "note": "Questions for split_test.py, 2026-10-23 (Gab: \"test with additional questions pointing to newly embedded paragraphs\"). Each answer sits only in the part of a paragraph beyond MiniLM's 256 tokens, which the board never embedded before. Claude's labels, written from that cut-off text and reworded so the question doesn't repeat it.",
+  "questions": [
+    {"kind": "answerable", "q": "a protest against Elon Musk's data center near Black neighborhoods in Memphis", "right": ["4-a-roadmap-for-action"]},
+    {"kind": "answerable", "q": "nurses protesting hospitals that push unproven AI instead of safe staffing", "right": ["4-a-roadmap-for-action"]},
+    {"kind": "answerable", "q": "what happens to models trained again and again on synthetic data?", "right": ["4-a-roadmap-for-action"]},
+    {"kind": "answerable", "q": "a startup paying data labelers pennies while claiming to empower workers", "right": ["4-a-roadmap-for-action"]},
+    {"kind": "answerable", "q": "should big cloud companies be banned from investing in AI startups?", "right": ["4-a-roadmap-for-action"]},
+    {"kind": "answerable", "q": "public AI research funding that ends up in cloud contracts with big tech", "right": ["4-a-roadmap-for-action"]},
+    {"kind": "answerable", "q": "is propaganda written by AI as convincing as propaganda written by people?", "right": ["how-ai-threatens-democracy"]},
+    {"kind": "answerable", "q": "AI firms agreeing to voluntary safeguards with the Biden administration", "right": ["how-ai-threatens-democracy"]},
+    {"kind": "answerable", "q": "building a workout app made only for yourself", "right": ["how-ai-is-actually-changing-product-and-design"]},
+    {"kind": "answerable", "q": "check a number the AI gave you with an expert before showing it to leadership", "right": ["how-ai-is-actually-changing-product-and-design"]},
+    {"kind": "answerable", "q": "if you move slowly enough you still catch up with new AI tools", "right": ["how-ai-is-actually-changing-product-and-design"]},
+    {"kind": "answerable", "q": "fixing a bad transcript by hand can be more work than writing it yourself", "right": ["2026-10-17 19-41"]}
+  ]
+}

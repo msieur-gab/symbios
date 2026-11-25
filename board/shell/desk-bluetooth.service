@@ -1,0 +1,13 @@
+[Unit]
+Description=desk: where the board is, over Bluetooth LE, for the phone's companion
+
+[Service]
+# a user service (as PipeWire is): BlueZ takes the service and advert from the user, and a new WiFi
+# goes through symbios-wifi, which the user may run with sudo (install-termnl.sh allows exactly that)
+ExecStart=/usr/bin/python3 /opt/symbios/desk/board/desk-bluetooth
+# bluetoothd may come up after the user's services: try again until it answers
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

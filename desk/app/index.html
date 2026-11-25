@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- no script but the desk's own files, no plugins, no <base> (symbios SECURITY.md, review of 24 Nov, C2) -->
+<meta http-equiv="Content-Security-Policy" content="script-src 'self'; object-src 'none'; base-uri 'none'">
+<title>desk</title>
+<link rel="stylesheet" href="css/fonts.css">
+<link rel="stylesheet" href="css/theme.css">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/apps.css">
+<link rel="stylesheet" href="css/desk.css">
+</head>
+<body>
+<div id="desktop"></div>
+<div id="dim"></div>
+
+<!-- DOCK : the symbios islands, two of them (apps · system) -->
+<div class="island" id="dock-center"><div class="dock-apps" id="dock-apps"></div></div>
+<div class="island" id="dock-right">
+  <button class="nowchip" id="nowchip" aria-label="Now playing"><span class="eq" id="chip-eq"><i></i><i></i><i></i></span><span class="ttl" id="chip-ttl">—</span></button>
+  <button class="tray" id="lock-btn" aria-label="Lock this screen" title="Lock this screen" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></button>
+  <button class="tray" id="tray-btn" aria-label="Change theme" title="Change theme">
+    <span class="clock"><span id="clk-time">--:--</span><small id="clk-date">—</small></span>
+  </button>
+</div>
+
+<!-- lock.js first: a screen the owner's phone hasn't allowed sees a lock screen, and the desk (main.js) stays unloaded -->
+<script type="module" src="js/lock.js"></script>
+</body>
+</html>

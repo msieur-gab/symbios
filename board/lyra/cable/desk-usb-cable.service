@@ -1,0 +1,11 @@
+[Unit]
+Description=desk cable network on the Lyra's USB (10.55.0.1, DHCP)
+After=S60netdevice.service sys-subsystem-net-devices-usb0.device
+
+[Service]
+ExecStart=/usr/local/sbin/desk-usb-cable.sh
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

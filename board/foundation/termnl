@@ -1,0 +1,72 @@
+#!/usr/bin/env python3
+"""termnl: talk to the board in plain words, from its own terminal or over SSH (SymbiOS's foundation).
+
+    termnl how much space is left?
+    termnl make a folder called bikes in documents
+    termnl yes                     answers the question TermNL just asked
+    termnl                         a conversation, one sentence a line (Ctrl+D to end)
+    termnl --new                   forgets the conversation and starts again
+
+TermNL listens only on its local socket (/run/symbios/termnl.sock), which only the board's user may open.
+One conversation per user, kept by TermNL, so "now delete it" and "yes" follow what was said before."""
+import getpass
+import http.client
+import json
+import os
+import socket
+import sys
+
+SOCKET = os.environ.get("TERMNL_SOCKET", "/run/symbios/termnl.sock")
+SESSION = "terminal-" + getpass.getuser()
+
+
+class Local(http.client.HTTPConnection):
+    def connect(self):
+        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.sock.settimeout(self.timeout)
+        self.sock.connect(SOCKET)
+
+
+def post(path, body, wait=120):
+    c = Local("termnl", timeout=wait)
+    c.request("POST", path, json.dumps(body), {"Content-Type": "application/json"})
+    return json.loads(c.getresponse().read() or b"{}")
+
+
+def show(r):
+    print(r.get("say") or "")
+    t = r.get("table")
+    if t:
+        rows = ([t["columns"]] if any(t.get("columns") or []) else []) + t.get("rows", [])
+        widths = [max(len(str(row[j])) for row in rows if j < len(row)) for j in range(max(len(row) for row in rows))]
+        for row in rows:
+            print("  " + "  ".join(str(c).ljust(widths[j]) for j, c in enumerate(row)).rstrip())
+    if r.get("show"):
+        how = "ran" if r.get("ran") == "ran" else "would run" if r.get("outcome") == "approve" else r.get("ran") or ""
+        print("  %s$ %s" % (how + ": " if how else "", r["show"]))
+    if r.get("output"):
+        print("\n".join("  " + l for l in r["output"].splitlines()))
+    if r.get("chips"):
+        print("  → " + " · ".join(r["chips"]))
+
+
+def say(text):
+    try:
+        show(post("/api/say", {"text": text, "session": SESSION}))
+    except (FileNotFoundError, ConnectionRefusedError):
+        sys.exit("TermNL isn't running (no %s): sudo systemctl start termnl" % SOCKET)
+    except PermissionError:
+        sys.exit("only the board's user may talk to TermNL (%s)" % SOCKET)
+
+
+if __name__ == "__main__":
+    args = sys.argv[1:]
+    if args == ["--new"]:
+        post("/api/reset", {"session": SESSION})
+        print("A new conversation.")
+    elif args:
+        say(" ".join(args))
+    else:
+        for line in sys.stdin:
+            if line.strip():
+                say(line.strip())

@@ -1,0 +1,235 @@
+/* shell.css — the desktop itself, SymbiOS v1's (its base.css, without what next/ doesn't have): the
+   wallpaper, windows, the three islands of the dock, the launcher, the overview, the quick panel, a
+   window's menu, the lock screen, the drop panel. Values only from tokens.css and theme.css. */
+
+/* ---- the desktop ---- */
+#desktop { position: fixed; inset: 0; background-color: var(--bg); background-image: var(--dither); background-size: 3px 3px; touch-action: none; }
+#desktop.dropping { outline: 3px dashed var(--fg); outline-offset: calc(-1 * var(--sp-2)); }
+#dim { position: fixed; inset: 0; z-index: 9999; background: var(--veil); opacity: 0; pointer-events: none; transition: opacity var(--dur); }
+
+/* ---- windows ---- */
+.win { position: absolute; min-width: 240px; min-height: 160px; display: flex; flex-direction: column; overflow: hidden; background: var(--panel); border: var(--line) solid var(--border); border-radius: var(--r-2); box-shadow: var(--shadow); animation: winIn var(--dur) ease; }
+@keyframes winIn { from { opacity: 0; transform: scale(.97) translateY(6px); } to { opacity: 1; } }
+.win.focused { border-color: var(--accent); box-shadow: 0 0 0 var(--line) var(--accent), var(--shadow); }
+.win.minimizing { animation: winOut var(--dur) ease forwards; }
+@keyframes winOut { to { opacity: 0; transform: scale(.96) translateY(14px); } }
+.win-head { height: var(--win-head); flex: 0 0 var(--win-head); display: flex; align-items: center; gap: var(--sp-2); padding: 0 var(--sp-2) 0 var(--sp-3); background: var(--hair); border-bottom: var(--line) solid var(--border); touch-action: none; }
+.win-title { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-sm); font-weight: var(--weight-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.win-title svg { width: var(--icon-sm); height: var(--icon-sm); flex: 0 0 auto; opacity: .8; }
+.win-title span { overflow: hidden; text-overflow: ellipsis; }
+.win-ctrl { display: flex; gap: var(--sp-1); }
+.win-btn { width: 26px; height: 26px; display: grid; place-items: center; padding: 0; border: 0; border-radius: var(--r-1); background: none; color: var(--muted); }
+.win-btn svg { width: var(--icon-sm); height: var(--icon-sm); }
+.win-btn:hover { background: var(--fg); color: var(--bg); }
+.win-btn.close:hover { background: var(--danger); color: var(--on-danger); }
+.win-body { flex: 1; min-height: 0; overflow: auto; position: relative; -webkit-user-select: text; user-select: text; }
+.win-body > * { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.rs { position: absolute; z-index: 5; }
+.rs-n, .rs-s { left: var(--sp-2); right: var(--sp-2); height: 7px; cursor: ns-resize; }
+.rs-n { top: -3px; } .rs-s { bottom: -3px; }
+.rs-e, .rs-w { top: var(--sp-2); bottom: var(--sp-2); width: 7px; cursor: ew-resize; }
+.rs-e { right: -3px; } .rs-w { left: -3px; }
+.rs-ne, .rs-nw, .rs-se, .rs-sw { width: 14px; height: 14px; }
+.rs-ne { top: -3px; right: -3px; cursor: nesw-resize; } .rs-nw { top: -3px; left: -3px; cursor: nwse-resize; }
+.rs-se { bottom: -3px; right: -3px; cursor: nwse-resize; } .rs-sw { bottom: -3px; left: -3px; cursor: nesw-resize; }
+.win.maxed .rs { display: none; }
+/* a window over the whole screen (an app asks for it: shared/desk.js fullScreen; Slides); #desktop is fixed, so no window
+   inside it can rise above the dock's islands: they step aside */
+body .win.full-screen { position: fixed; left: 0 !important; top: 0 !important; width: 100% !important; height: 100% !important; z-index: 9500 !important; border: 0; border-radius: 0; box-shadow: none; }
+.win.full-screen .win-head, .win.full-screen .rs { display: none; }
+body.full-screen .island { display: none; }
+#snap-prev { position: fixed; display: none; z-index: 8000; border: 2px solid var(--accent); border-radius: var(--r-2); background: var(--accent-soft); pointer-events: none; transition: left .12s ease, top .12s ease, width .12s ease, height .12s ease; }
+#hot-hint { position: fixed; top: 0; left: 50%; z-index: 9400; width: 66px; height: 6px; transform: translateX(-50%) translateY(-100%); background: var(--panel); border: var(--line) solid var(--border); border-top: 0; border-radius: 0 0 var(--r-2) var(--r-2); box-shadow: var(--shadow); pointer-events: none; transition: transform .18s ease; }
+#hot-hint.peek { transform: translateX(-50%) translateY(0); }
+
+/* ---- the dock: three islands ---- */
+.island { position: fixed; bottom: var(--edge); z-index: 9200; height: var(--dock-h); display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); background: var(--panel); border: var(--line) solid var(--border); border-radius: var(--r-3); box-shadow: var(--shadow); transition: transform var(--dur-slow) var(--ease); }
+#dock-left { left: var(--edge); }
+#dock-center { left: 50%; transform: translateX(-50%); max-width: calc(100vw - 520px); }
+#dock-right { right: var(--edge); }
+body.dock-hidden #dock-left, body.dock-hidden #dock-right { transform: translateY(calc(100% + 30px)); }
+body.dock-hidden #dock-center { transform: translateX(-50%) translateY(calc(100% + 30px)); }
+.dock-sep { width: var(--line); height: 34px; margin: 0 2px; flex: 0 0 auto; background: var(--border); }
+.dock-apps { display: flex; align-items: center; gap: var(--sp-2); overflow-x: auto; scrollbar-width: none; }
+.dock-apps::-webkit-scrollbar { display: none; }
+.tile { position: relative; width: 46px; height: 46px; flex: 0 0 auto; display: grid; place-items: center; padding: 0; border: 0; border-radius: var(--r-2); background: none; transition: transform .12s; }
+.tile:hover { transform: translateY(-3px); }
+.tile:active { transform: translateY(-1px) scale(.96); }
+.tile .glyph { width: 38px; height: 38px; display: grid; place-items: center; border-radius: var(--r-2); background: var(--hair); color: var(--fg); }
+.tile .glyph svg { width: var(--icon-md); height: var(--icon-md); }
+.tile.launcher .glyph { background: var(--fg); color: var(--bg); }
+.tile.overview .glyph { border: var(--line) solid var(--border); }
+.run-dot { position: absolute; bottom: 1px; left: 50%; width: 5px; height: 5px; transform: translateX(-50%); border-radius: var(--r-round); background: var(--muted); opacity: 0; transition: opacity var(--dur), width var(--dur); }
+.tile.running .run-dot { opacity: 1; }
+.tile.active .run-dot { opacity: 1; width: var(--sp-4); background: var(--accent); }
+.tile[data-tip]:hover::after { content: attr(data-tip); position: absolute; bottom: 56px; left: 50%; transform: translateX(-50%); padding: var(--sp-1) var(--sp-2); background: var(--panel); color: var(--fg); border: var(--line) solid var(--border); border-radius: var(--r-1); box-shadow: var(--shadow); font-size: var(--fs-xs); font-weight: var(--weight-strong); white-space: nowrap; pointer-events: none; }
+.pager { display: flex; align-items: center; gap: var(--sp-1); padding: 0 var(--sp-1); }
+.ws-dot { width: 9px; height: 9px; padding: 0; border: 0; border-radius: var(--r-round); background: var(--border); opacity: .65; transition: all var(--dur); }
+.ws-dot.has { opacity: 1; }
+.ws-dot:hover { transform: scale(1.25); }
+.ws-dot.active { width: 22px; background: var(--accent); opacity: 1; }
+
+/* ---- the right island: what is live, the clock ---- */
+.tray { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); border: 0; border-radius: var(--r-2); background: none; color: var(--fg); }
+.tray:hover { background: var(--hair); }
+.tray-ic:not([hidden]) { display: inline-grid; }
+.tray-ic svg { width: var(--icon); height: var(--icon); opacity: .8; }
+#tray-hot { color: var(--danger); }
+#tray-hot svg, #tray-mesh svg { opacity: 1; }
+.clock { font-size: var(--fs-sm); font-weight: var(--weight-strong); line-height: 1.05; text-align: right; }
+.clock small { display: block; color: var(--muted); font-size: var(--fs-xs); font-weight: var(--weight); }
+.workchip { display: grid; place-items: center; padding: var(--sp-2); border: 0; border-radius: var(--r-2); background: var(--hair); color: var(--fg); }
+.workchip svg { width: var(--icon); height: var(--icon); }
+.workchip:hover { background: var(--accent-soft); }
+.nowchip { display: none; align-items: center; gap: var(--sp-2); max-width: 170px; padding: var(--sp-2) var(--sp-3); border: 0; border-radius: var(--r-2); background: var(--hair); color: var(--fg); }
+.nowchip.show { display: flex; }
+.nowchip .ttl { font-size: var(--fs-xs); font-weight: var(--weight-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* the equaliser stands still: with no GPU on the board, a moving one costs ~15% CPU and 3–5 °C (learned on v1) */
+.eq { display: flex; align-items: flex-end; gap: 2px; height: 14px; flex: 0 0 auto; }
+.eq i { width: 3px; height: 14px; border-radius: 1px; background: var(--accent); transform-origin: bottom; transform: scaleY(.4); }
+.eq.play i:nth-child(1) { transform: scaleY(.55); }
+.eq.play i:nth-child(2) { transform: scaleY(1); }
+.eq.play i:nth-child(3) { transform: scaleY(.7); }
+
+/* ---- overlays: the launcher and the overview ---- */
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+#launcher, #ov { position: fixed; inset: 0; z-index: 8800; display: none; flex-direction: column; align-items: center; background: var(--scrim); animation: fade var(--dur); }
+#launcher { padding: 9vh 0 var(--dock-reserve); }
+#ov { padding: 5vh var(--sp-5) var(--dock-reserve); }
+#launcher.open, #ov.open { display: flex; }
+#launch-search { width: min(520px, 86vw); height: var(--control-lg); padding: 0 var(--sp-4); border: var(--line) solid var(--border); border-radius: var(--r-2); background: var(--panel); color: var(--fg); font-size: var(--fs-md); box-shadow: var(--shadow); outline: none; }
+#launch-search:focus { border-color: var(--accent); }
+#launch-search::placeholder { color: var(--muted); }
+.lg { display: grid; grid-template-columns: repeat(auto-fill, 96px); gap: var(--sp-3) var(--sp-5); }
+.lpart { width: min(640px, 86vw); margin-top: var(--sp-5); display: flex; flex-direction: column; gap: var(--sp-3); }
+#launch-apps:not([hidden]) + #launch-home, #launch-home:not([hidden]) + #launch-files, #launch-apps:not([hidden]) + #launch-home[hidden] + #launch-files { padding-top: var(--sp-5); border-top: var(--line) solid var(--border); }  /* the line only between the two parts */
+.lfound { display: flex; flex-direction: column; gap: 2px; }
+.lfound .g img { width: 20px; height: 20px; object-fit: cover; border-radius: 2px; }
+.lplaces { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 2px var(--sp-3); }
+#launcher { overflow-y: auto; }
+
+.lapp { display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-1); border: 0; border-radius: var(--r-2); background: none; color: var(--fg); }
+.lapp:hover { background: var(--hair); }
+.lapp .glyph { width: 58px; height: 58px; display: grid; place-items: center; border-radius: var(--r-3); background: var(--hair); color: var(--fg); }
+.lapp .glyph svg { width: var(--icon-lg); height: var(--icon-lg); }
+.lapp span:last-child { font-size: var(--fs-xs); font-weight: var(--weight-strong); }
+#ov h2 { margin: 0 0 var(--sp-4); font-size: var(--fs-sm); font-weight: var(--weight-strong); opacity: .85; }
+.ov-row { width: 100%; max-width: 1100px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-4); }  /* the four desktops on one line, narrower in a narrow window (Gab, 23 Nov) */
+.ov-pane { min-width: 0; display: flex; flex-direction: column; gap: var(--sp-2); cursor: pointer; }
+.ov-stage { position: relative; width: 100%; aspect-ratio: 16 / 10; overflow: hidden; background-color: var(--bg); background-image: var(--dither); background-size: 3px 3px; border: var(--line) solid var(--border); border-radius: var(--r-2); box-shadow: var(--shadow); transition: border-color var(--dur); }
+.ov-pane:hover .ov-stage { border-color: var(--fg); }
+.ov-pane.cur .ov-stage { border-color: var(--accent); }
+.ov-pane.drop .ov-stage { border-color: var(--accent); background: var(--accent-soft); }
+.ov-label { font-size: var(--fs-xs); font-weight: var(--weight-strong); text-align: center; opacity: .85; }
+.ov-win { position: absolute; min-width: 34px; min-height: 24px; display: flex; flex-direction: column; overflow: hidden; background: var(--panel); border: var(--line) solid var(--border); border-radius: var(--r-1); box-shadow: var(--shadow); cursor: grab; touch-action: none; }
+.ov-win.drag { z-index: 99; cursor: grabbing; pointer-events: none; }
+.ov-win-head { height: 6px; flex: 0 0 6px; background: var(--hair); }
+.ov-win-body { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: var(--sp-1); padding: 3px; }
+.ov-win-body .gl { width: 18px; height: 18px; flex: 0 0 auto; display: grid; place-items: center; border-radius: var(--r-1); background: var(--hair); }
+.ov-win-body .gl svg { width: 11px; height: 11px; }
+.ov-win-body span { font-size: 10px; font-weight: var(--weight-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ov-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: var(--fs-xs); }
+
+/* ---- the quick panel, above the right island ---- */
+#qs { position: fixed; right: var(--edge); bottom: var(--dock-reserve); z-index: 9050; display: none; width: 360px; max-height: calc(100vh - var(--dock-reserve) - 20px); overflow-y: auto; padding: var(--sp-4); background: var(--panel); border: var(--line) solid var(--border); border-radius: var(--r-2); box-shadow: var(--shadow); animation: winIn var(--dur); }
+#qs.open { display: flex; flex-direction: column; gap: var(--sp-3); }
+.qs-head { display: flex; justify-content: flex-end; gap: var(--sp-2); }
+.qs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); }
+.qtog { position: relative; min-width: 0; display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) 26px var(--sp-3) var(--sp-3); border: var(--line) solid var(--border); border-radius: var(--r-2); background: var(--hair); color: var(--fg); text-align: left; }
+.qtog .ic { width: 34px; height: 34px; flex: 0 0 auto; display: grid; place-items: center; border: var(--line) solid var(--border); border-radius: var(--r-round); background: var(--panel); transition: all var(--dur); }
+.qtog .ic svg { width: var(--icon); height: var(--icon); }
+.qtog > span:nth-child(2) { min-width: 0; }
+.qtog b { display: block; font-size: var(--fs-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }  /* a tile's name on one line */
+.qtog small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: var(--fs-xs); }
+.qtog.on { background: var(--accent-soft); border-color: var(--accent); }
+.qtog.on .ic { background: var(--accent); border-color: transparent; color: var(--on-accent); }
+.qtog.open { outline: var(--line) solid var(--fg); }
+.qtog .more { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: var(--fs-xs); }
+.qs-list:empty { display: none; }
+.qs-list .card { display: flex; flex-direction: column; gap: var(--sp-2); background: none; }
+.qs-list .chips { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.qs-list form { display: flex; flex-direction: column; gap: var(--sp-2); margin-top: var(--sp-1); }
+.qs-list form .btn { align-self: flex-end; }
+.qs-sliders { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-1) 0; }  /* room for a hand between the two (Gab, 23 Nov) */
+.slider-row .ib { width: var(--icon-md); height: var(--icon-md); border: 0; margin: 0 calc(-1 * (var(--icon-md) - var(--icon)) / 2); opacity: .75; }
+.slider-row .ib:hover { opacity: 1; }
+.slider-row.muted input { opacity: .35; }
+.slider-row input[type=range] { height: var(--control); margin: 0; }  /* the whole row grabs the slider, not only its thin line */
+.slider-row { min-height: var(--control); display: flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-1); }
+.slider-row svg { width: var(--icon); height: var(--icon); flex: 0 0 auto; opacity: .75; }
+.qs-foot { padding-top: var(--sp-3); border-top: var(--line) solid var(--border); color: var(--muted); font-size: var(--fs-xs); }
+.qs-foot .t { color: var(--fg); }
+.qs-foot .t.hot { color: var(--danger); }
+
+/* ---- a window's menu ---- */
+#ctx { position: fixed; z-index: 9500; display: none; min-width: 190px; padding: var(--sp-2); background: var(--panel); border: var(--line) solid var(--border); border-radius: var(--r-2); box-shadow: var(--shadow); font-size: var(--fs-sm); }
+#ctx.open { display: block; }
+.ctx-item { display: flex; align-items: center; justify-content: space-between; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-1); cursor: pointer; }
+.ctx-item:hover { background: var(--fg); color: var(--bg); }
+.ctx-sep { height: var(--line); margin: var(--sp-1) var(--sp-1); background: var(--border); }
+.ctx-lbl { padding: var(--sp-1) var(--sp-3); color: var(--muted); font-size: var(--fs-xs); letter-spacing: var(--caps-track); text-transform: uppercase; }
+.ctx-ws { display: flex; gap: var(--sp-1); padding: var(--sp-1) var(--sp-3) var(--sp-2); }
+.ctx-ws button { flex: 1; height: 30px; border: var(--line) solid var(--border); border-radius: var(--r-1); background: var(--hair); font-weight: var(--weight-strong); }
+.ctx-ws button:hover { background: var(--accent-soft); }
+.ctx-ws button.cur { background: var(--accent); border-color: transparent; color: var(--on-accent); }
+
+/* ---- the lock screen ---- */
+#lockscreen { position: fixed; inset: 0; z-index: 99999; display: grid; place-items: center; background: var(--bg); background-image: var(--dither); background-size: 3px 3px; }
+.lk-inner { display: flex; flex-direction: column; align-items: center; gap: var(--sp-3); padding: var(--sp-5); background: var(--bg); text-align: center; }
+.lk-brand { color: var(--muted); font-size: var(--fs-xs); letter-spacing: .24em; }
+.lk-time { font-size: var(--fs-xl); line-height: 1; font-variant-numeric: tabular-nums; }
+.lk-date { color: var(--muted); font-size: var(--fs-sm); }
+.lk-hint { margin-top: var(--sp-4); color: var(--muted); font-size: var(--fs-xs); line-height: 1.7; opacity: .7; }
+
+/* ---- what a drop is doing, and the short messages: at the top, above everything but the lock (Gab, 23 Nov:
+   "this small notification that we display should be on the top right corner ... on an upper level") ---- */
+#drop-panel, #toast, #notification { position: fixed; z-index: 9600; padding: 10px var(--sp-3); background: var(--panel); border: var(--line) solid var(--fg); border-radius: var(--r-2); box-shadow: var(--shadow); font-size: var(--fs-sm); }
+#drop-panel { top: var(--edge); right: var(--edge); width: min(380px, calc(100vw - 2 * var(--edge))); }
+/* an app's notification (shared/notification.js): the drop panel's card, at the top right */
+#notification { top: var(--edge); right: var(--edge); width: min(380px, calc(100vw - 2 * var(--edge))); display: flex; flex-direction: column; gap: var(--sp-1); cursor: pointer; }
+.nt-head { display: flex; align-items: center; gap: var(--sp-2); }
+.nt-head .gl { display: grid; place-items: center; }
+.nt-head .gl svg { width: 16px; height: 16px; }
+.nt-head b { flex: 1; min-width: 0; font-weight: var(--weight-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nt-head .btn { height: calc(var(--control) - var(--sp-2)); padding: 0 var(--sp-2); font-size: var(--fs-xs); }
+.nt-who { display: flex; gap: var(--sp-2); color: var(--muted); font-size: var(--fs-xs); }
+.nt-who span:first-child { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nt-who span:last-child { font-variant-numeric: tabular-nums; }
+.nt-text { font-family: var(--font-read); font-size: var(--fs-md); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+#toast { top: var(--edge); left: 50%; transform: translateX(-50%); max-width: min(480px, calc(100vw - 2 * var(--edge))); border-color: var(--border); }
+.dp-head { display: flex; align-items: center; gap: var(--sp-2); }
+.dp-head b { flex: 1; min-width: 0; font-weight: var(--weight-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#drop-panel .bar { margin: var(--sp-2) 0; }
+.dp-now, .dp-rate { height: calc(var(--fs-xs) * var(--lh)); display: flex; gap: var(--sp-2); font-size: var(--fs-xs); line-height: var(--lh); white-space: nowrap; overflow: hidden; }
+.dp-count { flex: 0 0 auto; }
+.dp-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.dp-line { max-height: 160px; overflow-y: auto; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; color: var(--muted); font-size: var(--fs-xs); overflow-wrap: anywhere; }
+.dp-line:empty { display: none; }
+.dp-line .btn.quiet { color: var(--fg); text-align: left; white-space: normal; }
+
+/* ---- touch, and small screens: one window at a time above the dock ---- */
+@media (pointer: coarse) {
+  .win-head { height: 46px; flex-basis: 46px; }
+  .win-btn { width: 36px; height: 36px; }
+  .rs-n, .rs-s { height: var(--sp-4); } .rs-e, .rs-w { width: var(--sp-4); }
+  .rs-ne, .rs-nw, .rs-se, .rs-sw { width: var(--sp-5); height: var(--sp-5); }
+  .ws-dot { width: 13px; height: 13px; } .ws-dot.active { width: 28px; }
+  .tile { width: 50px; height: 50px; } .tile .glyph { width: 42px; height: 42px; }
+  .tile[data-tip]:hover::after { display: none; }
+}
+@media (max-width: 760px) {
+  .win { left: 0 !important; top: 0 !important; width: 100% !important; height: calc(100% - var(--dock-reserve)) !important; border-radius: 0; }
+  .win:not(.focused) { display: none !important; }
+  #dock-center { left: var(--edge); right: var(--edge); bottom: 88px; max-width: calc(100vw - 2 * var(--edge)); transform: none; }
+}
+.qtog.mode small { text-transform: capitalize; }
+
+/* ---- the lock screen's words, when the owner's phone must let this screen in (gate.js) ---- */
+.lk-title { font-size: var(--fs-lg); }
+.lk-code { font-size: var(--fs-xl); letter-spacing: .25em; color: var(--accent); min-height: 1.2em; }
+.lk-said { max-width: 30em; color: var(--fg); font-size: var(--fs-md); line-height: 1.5; }
+
+/* ---- the claim card: near the board with no owner yet, the QR code a phone claims it with ---- */
+.claim-qr { width: min(260px, 70vw); padding: var(--sp-2); border-radius: var(--r-2); background: #fff; line-height: 0; }  /* a QR code reads dark on light, whatever the theme */
+.claim-qr svg { width: 100%; height: auto; }
+.claim-code { color: var(--accent); font-size: var(--fs-lg); letter-spacing: .18em; text-align: center; }

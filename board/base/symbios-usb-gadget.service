@@ -1,0 +1,12 @@
+[Unit]
+Description=SymbiOS USB network gadget (10.55.0.1)
+After=sys-kernel-config.mount usb-gadget.target network-pre.target
+Wants=usb-gadget.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/symbios-usb-gadget.sh
+
+[Install]
+WantedBy=multi-user.target

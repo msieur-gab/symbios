@@ -1,0 +1,8 @@
+# Meshtastic radios on USB, for a desk that talks to them through pyusb (a kernel without cdc_acm):
+# the desk's user reaches them through the plugdev group. Copy to /etc/udev/rules.d/, then
+#   sudo udevadm control --reload && sudo udevadm trigger   and replug the radio.
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="239a", MODE="0660", GROUP="plugdev"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="2886", MODE="0660", GROUP="plugdev"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="303a", MODE="0660", GROUP="plugdev"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="2e8a", MODE="0660", GROUP="plugdev"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="1915", MODE="0660", GROUP="plugdev"

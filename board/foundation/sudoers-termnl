@@ -1,0 +1,6 @@
+# SymbiOS: the only commands TermNL (running as __USER__) may run as root, without a password.
+# Each matches a command lent in TermNL's commands.json (the desk, the same user, uses the WiFi helper
+# and the power commands too); nothing else gets root. termnl and desk restart 2 s later, so the answer gets out first.
+# "Restart a service" takes only the services listed: any name was root itself (modprobe@<module> loads any kernel
+# module; symbios SECURITY.md, open point 8 and the review of 24 Nov, B5); a name not listed is refused by sudo.
+__USER__ ALL=(root) NOPASSWD: /usr/bin/systemctl poweroff, /usr/bin/systemctl reboot, /usr/bin/systemctl suspend, /usr/bin/systemctl restart desk-eink, /usr/bin/systemctl restart desk-kiosk, /usr/bin/systemctl restart bluetooth, /usr/bin/systemctl restart wpa_supplicant@wlan0, /usr/bin/systemctl restart systemd-networkd, /usr/bin/systemctl restart NetworkManager, /usr/bin/systemctl restart avahi-daemon, /usr/bin/systemd-run --on-active=2 /usr/bin/systemctl restart termnl, /usr/bin/systemd-run --on-active=2 /usr/bin/systemctl restart desk, /usr/local/sbin/symbios-wifi

@@ -1,0 +1,180 @@
+import os
+import pathlib
+"""The device's readers on this machine, and the reply chosen for what they find."""
+import tempfile
+import unittest
+
+from termnl import readers
+from termnl.load import load_language
+from termnl.server import TermNL
+
+
+# what the commands of check-wifi and show-wifi (iw), check-network (ip) and check-bluetooth say on Gab's laptop;
+# "0.-85 dBm" as the board's driver writes it
+WIFI = ("Connected to 70:3a:cb:77:de:72 (on wlp1s0)\n\tSSID: Mesh Network\n\tfreq: 5180.0\n\tsignal: -62 dBm\n"
+        "BSS 70:3a:cb:77:de:72(on wlp1s0) -- associated\n\tsignal: -50.00 dBm\n\tSSID: Mesh Network\n\t\t * SSID List\n"
+        "BSS 70:3a:cb:77:de:73(on wlp1s0)\n\tsignal: -48.00 dBm\n\tSSID: Mesh Network\n"
+        "BSS 11:22:33:44:55:01(on wlp1s0)\n\tsignal: -55.00 dBm\n\tSSID: Meadow\n"
+        "BSS 11:22:33:44:55:02(on wlp1s0)\n\tsignal: -58.00 dBm\n\tSSID: Meadow\n"
+        "BSS 11:22:33:44:55:03(on wlp1s0)\n\tsignal: 0.-85 dBm\n\tSSID: Caf\\xc3\\xa9\n"
+        "BSS 11:22:33:44:55:04(on wlp1s0)\n\tsignal: -65.00 dBm\n\tSSID: \\x00\\x00\\x00\n")
+NOT_CONNECTED = "Not connected.\n" + WIFI[WIFI.index("BSS "):].replace(" -- associated", "")
+ADDRESSES = "lo               UNKNOWN        127.0.0.1/8 \nwlp1s0           UP             192.168.1.51/24 \ndocker0  DOWN  172.17.0.1/16\n"
+BLUETOOTH = "Controller F8:94:C2:CE:CC:A9 (public)\n\tName: gab-Eve\n\tAlias: gab-Eve\n\tPowered: no\n"
+
+
+def usb_tree():
+    """a /sys/bus/usb/devices of its own: the Orange Pi's root hub and Prometheus (seen 24 Nov), a hub, a USB stick
+    of 32 GB behind it, USB-C earphones, and a laptop's camera that says it is built in"""
+    import os
+    root = tempfile.mkdtemp()
+    def dev(name, vendor, maker, product, cls, interfaces, **files):
+        d = os.path.join(root, name)
+        os.makedirs(d)
+        for k, v in dict(idVendor=vendor, idProduct="0001", manufacturer=maker, product=product, bDeviceClass=cls, **files).items():
+            if "/" in k:
+                os.makedirs(os.path.join(d, os.path.dirname(k)), exist_ok=True)
+            with open(os.path.join(d, k), "w") as f:
+                f.write(v + "\n")
+        for i, (c, inside) in enumerate(interfaces):
+            p = os.path.join(d, "%s:1.%d" % (name, i))
+            os.makedirs(os.path.join(p, inside) if inside else p)
+            with open(os.path.join(p, "bInterfaceClass"), "w") as f:
+                f.write(c + "\n")
+        return d
+    dev("usb4", "1d6b", "Linux", "OHCI", "09", [("09", "")])
+    dev("4-1", "239a", "Seeed Studio", "XIAO-BOOT", "ef", [("02", "tty/ttyACM0"), ("0a", "")])
+    dev("1-1", "1a86", "", "USB HUB", "09", [("09", "")])
+    d = dev("1-1.2", "0781", "SanDisk", "Ultra", "00", [("08", "host0/target0:0:0/0:0:0:0/block/sda")])
+    with open(os.path.join(d, "1-1.2:1.0/host0/target0:0:0/0:0:0:0/block/sda/size"), "w") as f:
+        f.write("62521344\n")
+    dev("1-1.3", "05ac", "Apple", "USB-C to 3.5mm Headphone Jack Adapter", "00", [("01", ""), ("01", ""), ("03", "")])
+    dev("1-2", "0bda", "Generic", "WebCamera", "ef", [("0e", "video4linux")], **{"port/connect_type": "hardwired"})
+    return root
+
+
+class Readers(unittest.TestCase):
+    def test_what_is_plugged_in_is_said_by_its_name_and_its_kind(self):
+        """Gab, 24 Nov: "if that's a mesh network or a node, a headset, a speaker… Or a hard drive or a USB stick" """
+        r = readers.usb(readers.Words(load_language("en")["lists"]["readings"]), root=usb_tree())
+        self.assertEqual(r["level"], "fine")
+        self.assertEqual(r["table"]["rows"], [["SanDisk Ultra", "a drive", "29.8 GB"],
+                                              ["Apple USB-C to 3.5mm Headphone Jack Adapter", "sound (headset, speaker)", ""],
+                                              ["Seeed Studio XIAO-BOOT", "a Meshtastic radio", ""]])  # no hub, no built-in camera
+        self.assertIn("a Meshtastic radio (Seeed Studio XIAO-BOOT)", r["values"]["list"])
+        self.assertEqual(readers.usb(readers.Words({}), root=tempfile.mkdtemp())["level"], "none")
+
+    def test_what_is_in_the_trash_is_shown_the_last_deleted_first(self):
+        """Gab, 24 Nov: "what is in the trash, or show me the trash, or show me the deleted files" """
+        home = tempfile.mkdtemp()
+        app = TermNL(home=home)
+        r = app.say("what is in the trash", "t1")
+        self.assertEqual((r["skill"], r.get("level")), ("show-trash", "empty"))
+        files = os.path.join(home, ".local", "share", "Trash", "files")
+        os.makedirs(os.path.join(files, "old-notes"))
+        for n in ("todo.txt", "report.pdf"):
+            pathlib.Path(files, n).write_text("x")
+        info = os.path.join(home, ".local", "share", "Trash", "info")
+        os.makedirs(info)
+        pathlib.Path(info, "old-notes.trashinfo").write_text("[Trash Info]\nPath=/x\nDeletionDate=2020-01-02T10:00:00\n")
+        r = readers.trash(readers.Words(load_language("en")["lists"]["readings"]), home=home)
+        self.assertEqual(r["level"], "fine")
+        self.assertEqual(r["values"]["count"], "3")
+        self.assertEqual([row[0] for row in r["table"]["rows"]][-1], "old-notes")  # deleted longest ago, last
+        self.assertEqual(r["table"]["rows"][-1][1], "folder")
+        for said in ("show me the trash", "show me the deleted files", "do i have files in the trash"):
+            self.assertEqual(app.say(said, said)["skill"], "show-trash", said)
+
+    def test_every_reader_gives_a_level_it_declares_and_its_values(self):
+        args = {"folder": {"place": tempfile.gettempdir()}, "files": {"place": tempfile.gettempdir(), "type": "md,txt"},
+                "has": {"place": tempfile.gettempdir(), "type": "md"}, "recent": {"place": tempfile.gettempdir()}, "size": {"place": tempfile.gettempdir()}, "wifi": {"output": WIFI}, "networks": {"output": WIFI},
+                "network": {"output": ADDRESSES}, "bluetooth": {"output": BLUETOOTH}, "trash": {"home": tempfile.mkdtemp()}}
+        for name, (_, levels, names) in readers.READERS.items():
+            r = readers.read(name, words=load_language("en")["lists"]["readings"], **args.get(name, {}))
+            self.assertIn(r["level"], levels, name)
+            for n in names:
+                self.assertIn(readers.placeholder(name, n), r["values"], name)
+
+    def test_the_reply_is_the_one_written_for_the_level(self):
+        app = TermNL.__new__(TermNL)
+        app.lang, app.settings = load_language("en"), {"name": "Gab"}
+        skill = next(s for s in app.lang["skills"] if s["id"] == "check-temperature")
+        real = readers.READERS["temperature"]
+        try:
+            for level, t in (("fine", "45 °C"), ("hot", "84 °C")):
+                readers.READERS["temperature"] = (lambda w, level=level, t=t: {"level": level, "values": {"": t, "max": "80 °C"}}, *real[1:])
+                r = {"skill": "check-temperature", "reads": "temperature"}
+
+                class A:
+                    reply = staticmethod(lambda k, v=None: k)
+                app.read(A, r)
+                self.assertIn(t, r["say"])
+                self.assertIn(r["say"], [l.replace("{@sys.temperature}", t).replace("{@sys.temperature.max}", "80 °C").replace("{user}", "Gab")
+                                         for l in skill["when"][level]])
+        finally:
+            readers.READERS["temperature"] = real
+
+    def test_the_clock_is_trusted_only_when_synchronised_and_after_termnl_was_made(self):
+        words = load_language("en")["lists"]["readings"]
+        real, now = readers._synchronised, readers.datetime
+        try:
+            readers._synchronised = lambda: False
+            self.assertEqual(readers.read("clock", words=words)["level"], "unsure")
+            readers._synchronised = lambda: None  # can't tell: the clock is taken as it is
+            self.assertEqual(readers.read("clock", words=words)["level"], "fine")
+
+            class Then(now.datetime):
+                @classmethod
+                def now(cls):
+                    return cls(1970, 1, 1, 0, 3)
+            readers.datetime = type("D", (), {"datetime": Then})
+            r = readers.read("clock", words=words)
+            self.assertEqual((r["level"], r["values"]["@sys.clock.date"], r["values"]["@sys.clock.day"]), ("wrong", "1 January 1970", "Thursday"))
+        finally:
+            readers._synchronised, readers.datetime = real, now
+
+    def test_wifi_network_and_bluetooth_are_read_from_their_commands_output(self):
+        w = load_language("en")["lists"]["readings"]
+        r = readers.read("wifi", words=w, output=WIFI)
+        self.assertEqual((r["level"], r["values"]["@sys.wifi"], r["values"]["@sys.wifi.signal"]), ("fine", "Mesh Network", "76%"))  # the access point in use, not the strongest
+        self.assertEqual(readers.read("wifi", words=w, output=NOT_CONNECTED)["level"], "not connected")
+        self.assertEqual(readers.read("wifi", words=w, output="")["level"], "off")
+        r = readers.read("networks", words=w, output=WIFI)
+        # one row per name, its strongest access point (the one in use: its signal now); a name with other
+        # letters; a hidden network left out
+        self.assertEqual([row[:2] for row in r["table"]["rows"]], [["Meadow", "90%"], ["Mesh Network (connected)", "76%"], ["Café", "30%"]])
+        self.assertEqual(r["table"]["levels"], [None, None, "weak"])
+        r = readers.read("network", words=w, output=ADDRESSES)
+        self.assertEqual((r["level"], r["values"]["@sys.network.address"], r["values"]["@sys.network.through"]), ("connected", "192.168.1.51", "Wi-Fi"))
+        self.assertEqual(readers.read("network", words=w, output=ADDRESSES.split("\n")[0])["level"], "not connected")
+        r = readers.read("bluetooth", words=w, output=BLUETOOTH)
+        self.assertEqual((r["level"], r["values"]["@sys.bluetooth.name"]), ("off", "gab-Eve"))
+        self.assertEqual(readers.read("bluetooth", words=w, output="No default controller available\n")["level"], "none")
+
+    def test_the_networks_around_are_read_from_each_wifi_manager(self):
+        """termnl-wifi asks whichever Wi-Fi manager the device runs (Gab's board, 25 Oct: iw's cache knew only
+        the network it was on); a host can lend its own scan, one line of JSON (the desk's desk-wifi)"""
+        nmcli = "manager: nmcli\n :95:WPA2:Meadow\n :94:WPA2:Mesh Network\n*:77:WPA2:Mesh Network\n :69::Caf\\:e\n"
+        self.assertEqual(readers._wifi_list(nmcli), [("Meadow", 95, False), ("Mesh Network", 77, True), ("Caf:e", 69, False)])
+        wpa = ("Connected to 70:3a:cb:77:db:91 (on wlan0)\n\tSSID: Mesh Network\n\tsignal: -62 dBm\nmanager: wpa_cli\n"
+               "bssid / frequency / signal level / flags / ssid\n70:3a:cb:77:db:91\t2412\t-60\t[WPA2-PSK-CCMP][ESS]\tMesh Network\n"
+               "aa:bb:cc:dd:ee:ff\t5180\t-45\t[WPA2-PSK-CCMP][ESS]\tMeadow\n")
+        self.assertEqual(readers._wifi_list(wpa), [("Meadow", 100, False), ("Mesh Network", 76, True)])
+        iwctl = ("manager: iwctl\n                               Available networks\n------\n      Network name      Security  Signal\n------\n"
+                 "  \x1b[0m> \x1b[0m  Mesh Network      psk       ****\n      Meadow        psk       ***\n")
+        self.assertEqual(readers._wifi_list(iwctl), [("Mesh Network", 100, True), ("Meadow", 75, False)])
+        desk = ('Connected to 70:3a:cb:77:db:91 (on wlan0)\n\tSSID: Mesh Network\n\tsignal: -22 dBm\n'
+                '{"networks": [{"ssid": "Mesh Network", "signal": -22.0, "secure": true}, {"ssid": "Meadow", "signal": -23.0, "secure": true}, '
+                '{"ssid": "Vodafone Homespot", "signal": -63.0, "secure": false}]}\n')
+        self.assertEqual(readers._wifi_list(desk), [("Mesh Network", 100, True), ("Meadow", 100, False), ("Vodafone Homespot", 74, False)])
+        # a network that asks for a password is marked "lock", an open one not (Gab, 25 Oct: "a small lock …
+        # before the private" one, "Simple shape and one color": each page draws it in its own look)
+        w = load_language("en")["lists"]["readings"]
+        for output, marks in ((nmcli, ["lock", "lock", None]), (wpa, ["lock", "lock"]), (iwctl, ["lock", "lock"]),
+                              (desk, ["lock", "lock", None]), (WIFI, [None, None, None])):  # WIFI was kept without iw's RSN lines: not known
+            self.assertEqual(readers.read("networks", words=w, output=output)["table"]["marks"], marks)
+
+
+
+if __name__ == "__main__":
+    unittest.main()

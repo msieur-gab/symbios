@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>desk</title>
+<style>body { margin: 0; padding: 24px; background: #001a0d; color: #3bff88; font: 14px/1.5 ui-monospace, monospace; }</style>
+</head>
+<body>
+<p id="say">Answering the companion…</p>
+<!-- A tab the phone's companion page opens when it cannot call the desk directly: this page is
+     the desk's own, so it may ask the desk anything, and it passes the answer to the window that
+     opened it. It speaks to the companion's address only. -->
+<script>
+(async () => {
+  const say = document.getElementById("say");
+  if (!window.opener) return say.textContent = "This page is opened by the desk's companion on a phone. There is nothing to see here on its own.";
+  try {
+    // the companion's addresses come from desk.conf; the answer reaches only the one that opened this tab
+    const [hello, status, kept] = await Promise.all(["/api/hello", "/api/status", "/api/articles"].map(u => fetch(u).then(r => r.json())));
+    for (const site of hello.companion) window.opener.postMessage({ desk: status.host, articles: kept.articles.length }, site);
+    say.textContent = "The desk answered the companion. This tab can be closed.";
+  } catch (e) {
+    say.textContent = "The desk could not answer: " + e.message;
+  }
+})();
+</script>
+</body>
+</html>

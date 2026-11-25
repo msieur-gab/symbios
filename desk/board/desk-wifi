@@ -1,0 +1,118 @@
+#!/usr/bin/env python3
+"""desk-wifi: the WiFi networks the board knows, for the desk's Networks screen. Runs as root
+(the desk's server calls it through sudo; install.sh allows exactly this file). A network added
+here goes in a netplan file of its own, 60-desk-wifi.yaml, written as JSON (which is YAML, and
+needs no escaping); the board then uses whichever known network is in range. Every answer is
+one line of JSON.
+
+    desk-wifi status          where the board is now, and the networks it knows
+    desk-wifi scan            the networks in range, strongest first
+    desk-wifi add NAME        password on standard input (none for an open network)
+    desk-wifi forget NAME     only a network added here
+"""
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+
+IFACE = "wlan0"
+OURS = "/etc/netplan/60-desk-wifi.yaml"
+
+
+def out(*cmd, wait=20):
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=wait).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+
+
+def ours():
+    try:
+        return json.load(open(OURS))["network"]["wifis"][IFACE]["access-points"]
+    except (OSError, ValueError, KeyError):
+        return {}
+
+
+def save(points):
+    if not points:
+        return os.path.exists(OURS) and os.remove(OURS)
+    fd = os.open(OURS, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)  # it holds passwords
+    with os.fdopen(fd, "w") as f:
+        json.dump({"network": {"version": 2, "wifis": {IFACE: {"dhcp4": True, "optional": True, "access-points": points}}}}, f)
+
+
+def status():
+    link = re.search(r"SSID: (.*)", out("iw", "dev", IFACE, "link"))
+    ip = re.search(r"inet ([\d.]+)", out("ip", "-4", "-o", "addr", "show", IFACE))
+    # every network netplan knows, whoever wrote it: the names are the keys at the left edge
+    known = [re.sub(r'^"|"$', "", l[:-1]) for l in out("netplan", "get", "network.wifis.%s.access-points" % IFACE).splitlines()
+             if l and not l[0].isspace() and l.endswith(":")]
+    return {"ssid": link.group(1).strip() if link else None, "ip": ip.group(1) if ip and link else None,
+            "known": [{"ssid": s, "ours": s in ours()} for s in sorted(known, key=str.lower)]}
+
+
+def scan():
+    best = {}
+    for block in re.split(r"^BSS ", out("iw", "dev", IFACE, "scan"), flags=re.M)[1:]:
+        name, level = re.search(r"^\tSSID: (.+)$", block, re.M), re.search(r"signal: (-?[\d.]+)", block)
+        if not name or "\\x00" in name.group(1):
+            continue  # a hidden network has no name to show
+        ssid, signal = name.group(1).strip(), float(level.group(1)) if level else -100.0
+        if ssid not in best or signal > best[ssid]["signal"]:
+            best[ssid] = {"ssid": ssid, "signal": signal, "secure": bool(re.search(r"^\t(RSN|WPA):", block, re.M))}
+    return {"networks": sorted(best.values(), key=lambda n: -n["signal"])}
+
+
+def apply():
+    """Hand the known networks to the system and wait until the board is on one of them."""
+    subprocess.run(["netplan", "apply"], capture_output=True, timeout=60)
+    for _ in range(30):
+        now = status()
+        if now["ip"]:
+            return now
+        time.sleep(1)
+    return status()
+
+
+def add(ssid, password):
+    if not 1 <= len(ssid.encode()) <= 32:
+        return {"error": "a network name is 1 to 32 characters long"}
+    if password and not 8 <= len(password) <= 63:
+        return {"error": "a WiFi password is 8 to 63 characters long"}
+    before, points = ours(), ours()
+    points[ssid] = {"auth": {"key-management": "psk", "password": password}} if password else {}
+    save(points)
+    if subprocess.run(["netplan", "generate"], capture_output=True).returncode:
+        save(before)
+        return {"error": "the system refused that network"}
+    now = apply()
+    if not now["ip"]:  # nothing in range answers any more: put back what worked before
+        save(before)
+        return {**apply(), "error": "the board could not get on a network with that; what it knew before is back"}
+    return {**now, "joined": now["ssid"] == ssid}
+
+
+def forget(ssid):
+    points = ours()
+    if ssid not in points:
+        return {"error": "only a network added from the desk can be forgotten here"}
+    del points[ssid]
+    save(points)
+    return apply()
+
+
+if __name__ == "__main__":
+    if os.geteuid():
+        sys.exit("desk-wifi runs as root")
+    act, name = (sys.argv[1:2] or ["status"])[0], " ".join(sys.argv[2:])
+    if act == "add":
+        answer = add(name, sys.stdin.read().rstrip("\n"))
+    elif act == "forget":
+        answer = forget(name)
+    elif act == "scan":
+        answer = scan()
+    else:
+        answer = status()
+    print(json.dumps(answer))

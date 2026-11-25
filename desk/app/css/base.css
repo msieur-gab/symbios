@@ -1,0 +1,133 @@
+/* base.css — shell layout and chrome, taken from symbios (app/desktop/css/base.css): tokens,
+   windows, dock islands, tray, monitor gauges, touch rules. Only the parts desk uses; the
+   rules themselves are unchanged. Colour lives in theme.css. */
+:root{
+  --radius-win:5px; --radius-panel:8px;
+  --dock-h:60px; --dock-reserve:88px;
+  --mono:var(--font);                 /* one typeface everywhere */
+  --shadow:0 6px 20px -10px color-mix(in srgb, var(--fg) 45%, transparent);
+  /* legacy chrome names -> theme tokens (so old rules theme without edits) */
+  --text:var(--fg);
+  --text-dim:var(--muted);
+  --panel-solid:var(--panel);
+  --win-bg:var(--panel);
+  --win-head:var(--hair);
+  --scrim:color-mix(in srgb, var(--bg) 90%, transparent);
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font-family:var(--font);color:var(--fg);overflow:hidden;-webkit-user-select:none;user-select:none}
+#desktop{position:fixed;inset:0;background-color:var(--bg);background-image:var(--dither);background-size:3px 3px;
+  transition:filter .25s;touch-action:none}
+#dim{position:fixed;inset:0;background:#000;opacity:0;pointer-events:none;transition:opacity .2s}
+
+/* themed scrollbars — driven by theme tokens so they track every theme. Thin,
+   inset thumb, no track chrome (minimal). Covers WebKit (cog/WPE kiosk) + FF.
+   The dock keeps its own scrollbar-hidden override below. */
+*{scrollbar-width:thin;scrollbar-color:var(--panel-border) transparent}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--panel-border);border-radius:8px;
+  border:2px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:var(--muted)}
+::-webkit-scrollbar-corner{background:transparent}
+
+/* ---- windows ---- */
+.win{position:absolute;min-width:240px;min-height:160px;background:var(--panel);
+  border:1px solid var(--panel-border);border-radius:var(--radius-win);box-shadow:var(--shadow);
+  display:flex;flex-direction:column;overflow:hidden;animation:winIn .16s ease}
+@keyframes winIn{from{opacity:0;transform:scale(.97) translateY(6px)}to{opacity:1}}
+.win.focused{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),var(--shadow)}
+.win.minimizing{animation:winOut .16s ease forwards}
+@keyframes winOut{to{opacity:0;transform:scale(.96) translateY(14px)}}
+.win-head{height:38px;flex:0 0 38px;display:flex;align-items:center;gap:8px;padding:0 8px 0 12px;
+  background:var(--hair);border-bottom:1px solid var(--panel-border);touch-action:none}
+.win-title{font-size:13px;font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  display:flex;align-items:center;gap:8px}
+.win-title svg{width:15px;height:15px;opacity:.8}
+.win-ctrl{display:flex;gap:4px}
+.win-btn{width:26px;height:26px;border:0;border-radius:5px;background:transparent;color:var(--muted);
+  cursor:pointer;display:grid;place-items:center}
+.win-btn:hover{background:var(--fg);color:var(--bg)}
+.win-btn.close:hover{background:#e5484d;color:#fff}
+.win-btn svg{width:14px;height:14px}
+.win-body{flex:1;overflow:auto;position:relative;-webkit-user-select:text;user-select:text}
+.rs{position:absolute;z-index:5}
+.rs-n{top:-3px;left:8px;right:8px;height:7px;cursor:ns-resize}
+.rs-s{bottom:-3px;left:8px;right:8px;height:7px;cursor:ns-resize}
+.rs-e{right:-3px;top:8px;bottom:8px;width:7px;cursor:ew-resize}
+.rs-w{left:-3px;top:8px;bottom:8px;width:7px;cursor:ew-resize}
+.rs-ne{top:-3px;right:-3px;width:14px;height:14px;cursor:nesw-resize}
+.rs-nw{top:-3px;left:-3px;width:14px;height:14px;cursor:nwse-resize}
+.rs-se{bottom:-3px;right:-3px;width:14px;height:14px;cursor:nwse-resize}
+.rs-sw{bottom:-3px;left:-3px;width:14px;height:14px;cursor:nesw-resize}
+.win.maxed .rs{display:none}
+
+/* ============================================================
+   THREE-ISLAND DOCK
+   left = launcher + desk system · center = apps · right = system
+   ============================================================ */
+.island{position:fixed;bottom:14px;height:var(--dock-h);display:flex;align-items:center;gap:8px;
+  padding:8px 10px;background:var(--panel);
+  border:1px solid var(--panel-border);border-radius:14px;box-shadow:var(--shadow);z-index:9200;
+  transition:transform .26s cubic-bezier(.4,0,.2,1)}
+#dock-left{left:14px}
+#dock-center{left:50%;transform:translateX(-50%);max-width:calc(100vw - 520px)}
+#dock-right{right:14px}
+/* auto-hide: slide the three islands off the bottom edge */
+body.dock-hidden #dock-left,
+body.dock-hidden #dock-right{transform:translateY(calc(100% + 30px))}
+body.dock-hidden #dock-center{transform:translateX(-50%) translateY(calc(100% + 30px))}
+.dock-sep{width:1px;height:34px;background:var(--panel-border);margin:0 2px;flex:0 0 auto}
+.dock-apps{display:flex;align-items:center;gap:6px;overflow-x:auto;scrollbar-width:none}
+.dock-apps::-webkit-scrollbar{display:none}
+
+.tile{width:46px;height:46px;flex:0 0 auto;border:0;border-radius:11px;cursor:pointer;background:transparent;
+  position:relative;display:grid;place-items:center;transition:transform .12s}
+.tile:hover{transform:translateY(-3px)}
+.tile:active{transform:translateY(-1px) scale(.96)}
+.tile .glyph{width:38px;height:38px;border-radius:9px;display:grid;place-items:center;background:var(--hair);color:var(--fg)}
+.tile .glyph svg{width:21px;height:21px}
+.tile.launcher .glyph{background:var(--fg);color:var(--bg)}
+.tile.overview .glyph{background:var(--hair);color:var(--fg);border:1px solid var(--panel-border)}
+.run-dot{position:absolute;bottom:1px;left:50%;transform:translateX(-50%);width:5px;height:5px;border-radius:50%;
+  background:var(--muted);opacity:0;transition:opacity .15s,width .15s}
+.tile.running .run-dot{opacity:1}
+.tile.active .run-dot{opacity:1;width:16px;background:var(--accent)}
+.tile[data-tip]:hover::after{content:attr(data-tip);position:absolute;bottom:56px;left:50%;
+  transform:translateX(-50%);background:var(--panel);color:var(--fg);font-size:12px;font-weight:600;
+  padding:5px 9px;border-radius:6px;white-space:nowrap;box-shadow:var(--shadow);border:1px solid var(--panel-border);pointer-events:none}
+
+/* system (right) */
+.tray{display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 10px;border-radius:9px;
+  border:0;background:transparent;color:var(--fg)}
+.tray:hover{background:var(--hair)}
+.tray[hidden]{display:none}
+.tray svg{width:16px;height:16px;opacity:.8}
+#ic-vol.muted{opacity:.35}
+.clock{font-size:13px;font-weight:600;line-height:1.05;text-align:right}
+.clock small{display:block;font-size:10.5px;font-weight:500;color:var(--muted)}
+
+
+/* ---- system monitor ---- */
+.mon-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:16px}
+.gauge{background:var(--hair);border:1px solid var(--panel-border);border-radius:10px;padding:14px}
+.gauge h4{margin:0 0 4px;font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.gauge .big{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
+.gauge .bar{height:7px;border-radius:4px;background:var(--panel-border);margin-top:9px;overflow:hidden}
+.gauge .bar i{display:block;width:100%;height:100%;background:var(--accent);border-radius:4px;transform-origin:left;transform:scaleX(0);transition:transform .2s}
+.spark{display:flex;gap:2px;align-items:flex-end;height:34px;margin-top:8px}
+.spark i{flex:1;height:100%;background:var(--accent);border-radius:2px;opacity:.8;transform-origin:bottom;transform:scaleY(.06);transition:transform .2s}
+
+/* touch / coarse pointer: bigger targets, finger-friendly resize edges, no hover tooltips */
+@media (pointer:coarse){
+  .win-head{height:46px;flex-basis:46px}
+  .win-btn{width:36px;height:36px}
+  .win-btn svg{width:17px;height:17px}
+  .rs-n,.rs-s{height:16px}.rs-e,.rs-w{width:16px}
+  .rs-ne,.rs-nw,.rs-se,.rs-sw{width:24px;height:24px}
+  .ws-dot{width:13px;height:13px}.ws-dot.active{width:28px}
+  .tile{width:50px;height:50px}.tile .glyph{width:42px;height:42px}
+  .tile[data-tip]:hover::after{display:none}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}

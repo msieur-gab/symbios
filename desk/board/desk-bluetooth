@@ -1,0 +1,383 @@
+#!/usr/bin/env python3
+"""desk-bluetooth: the board says where it is over Bluetooth LE, so a phone finds the desk on
+any WiFi, even one where devices can't see each other, and takes a new WiFi from it. It
+advertises one service with two values, each one line of JSON:
+
+    where  read:  {"name": "desk", "address": "192.168.1.23", "wifi": "home"}  (null when off WiFi)
+    join   write: {"ssid": "library", "password": "..."}  → desk-wifi add, as the cable's screen does
+           read:  {"state": "idle" | "joining" | "done", "asked": ..., ...desk-wifi's answer: ssid, ip, joined, error}
+    steer  write, no answer: the phone as a trackpad for the HDMI screen, lines of text
+           "m dx dy" move, "c l|r" click, "d l" / "u l" press / release, "s dy" scroll,
+           "p <words>" the slides: "p open <deck>", "p next", "p prev", "p go <n>", "p black", "p full", "p end"
+           (handed to the desk's server, which keeps the slide on show for every screen)
+    slide  read, notify: the slide on show, {"d": deck or null, "i": 4, "n": 23, "b": false (blacked), "f": true (whole screen)}
+    session write: {"id": the phone's id, "key": a key made for this session} (trust.py, begin)
+           read:  {"session": …, "key": the board's one-time key}, or {"error": "refused"}
+
+The secure link (SECURE-LINK.md, step 4): once the desk has an owner, join and steer take only what the owner's
+phone sealed in a session opened here. join: {"s": session, "n": number, "c": the sealed JSON, base64}; steer, a
+frame of bytes: the session (12), the number (8, big-endian), the sealed lines. Anything else is ignored. While the
+desk has no owner yet, both take plain writes as before: nobody to protect, and the claim comes first (Gab, 2026-10-27).
+Anyone near may still read where the board is and the slide on show (deck name included): a gap kept for now.
+The pointer is a mouse made through
+/dev/uinput, which the input group may use (99-desk-uinput.rules). Talks to BlueZ over D-Bus with dbus-next (python3-dbus-next);
+install.sh runs it as the user's desk-bluetooth.service.
+"""
+import asyncio
+import concurrent.futures
+import fcntl
+import json
+import logging
+import os
+import re
+import struct
+import subprocess
+import sys
+import urllib.request
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import trust  # noqa: E402  (the desk's trust.py, beside server.py)
+
+from dbus_next import BusType, Variant
+from dbus_next.aio import MessageBus
+from dbus_next.service import ServiceInterface, dbus_property, method, PropertyAccess
+
+SERVICE = "d35c0001-5e5a-4d3e-9b1f-6c0de5c0de01"  # the companion asks for this one
+WHERE = "d35c0002-5e5a-4d3e-9b1f-6c0de5c0de01"
+JOIN = "d35c0003-5e5a-4d3e-9b1f-6c0de5c0de01"
+STEER = "d35c0004-5e5a-4d3e-9b1f-6c0de5c0de01"
+SLIDE = "d35c0005-5e5a-4d3e-9b1f-6c0de5c0de01"
+SESSION = "d35c0006-5e5a-4d3e-9b1f-6c0de5c0de01"
+KEYS = "/var/lib/desk-trust" if os.path.isdir("/var/lib/desk-trust") else os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".trust")
+DESK = os.environ.get("DESK_URL", "http://127.0.0.1")  # the desk's server on this board (desk.service: port 80)
+IFACE, ROOT = "wlan0", "/desk"
+LOCAL = {}  # the board's own pass to the desk's server (trust.py, local_pass), once the keys are loaded
+# BlueZ asks the advert for optional properties it doesn't have (TxPower…): dbus-next logs each
+logging.getLogger().addFilter(lambda r: "does not have property" not in r.getMessage())
+
+
+def out(*cmd):
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+
+
+def where():
+    """Where the board is now: the same answer desk-wifi status gives, without the known networks."""
+    link = re.search(r"SSID: (.*)", out("/usr/sbin/iw", "dev", IFACE, "link"))
+    ip = re.search(r"inet (\d+\.\d+\.\d+\.\d+)", out("ip", "-4", "addr", "show", IFACE))
+    return {"name": os.uname().nodename, "address": ip.group(1) if ip and link else None,
+            "wifi": link.group(1).strip() if link else None}
+
+
+class Service(ServiceInterface):
+    def __init__(self):
+        super().__init__("org.bluez.GattService1")
+
+    @dbus_property(access=PropertyAccess.READ)
+    def UUID(self) -> "s":
+        return SERVICE
+
+    @dbus_property(access=PropertyAccess.READ)
+    def Primary(self) -> "b":
+        return True
+
+
+class Value(ServiceInterface):
+    """One value of the service. A phone reads or writes one longer than a packet in pieces, each
+    from an offset: a read is answered from the snapshot taken at offset 0, so the pieces agree."""
+    def __init__(self, uuid, flags, read):
+        super().__init__("org.bluez.GattCharacteristic1")
+        self.uuid, self.flags, self.read, self.snapshot = uuid, flags, read, b""
+
+    @dbus_property(access=PropertyAccess.READ)
+    def UUID(self) -> "s":
+        return self.uuid
+
+    @dbus_property(access=PropertyAccess.READ)
+    def Service(self) -> "o":
+        return ROOT + "/service0"
+
+    @dbus_property(access=PropertyAccess.READ)
+    def Flags(self) -> "as":
+        return self.flags
+
+    @method()
+    def ReadValue(self, options: "a{sv}") -> "ay":
+        offset = options["offset"].value if "offset" in options else 0
+        if offset == 0:
+            self.snapshot = json.dumps(self.read()).encode()
+        return self.snapshot[offset:]
+
+
+def pieces(got, value, options):
+    """A write may come in pieces (offset): the bytes so far, and the JSON once it is whole, else None."""
+    got[options["offset"].value if "offset" in options else 0:] = value
+    try:
+        return json.JSONDecoder().raw_decode(got.decode())[0]  # what follows the JSON is ignored
+    except ValueError:  # UnicodeDecodeError too
+        return None
+
+
+class Session(Value):
+    """A session with the owner's phone, opened over Bluetooth as over the WiFi (trust.py): the phone writes its
+    one-time key, then reads the board's."""
+    def __init__(self):
+        super().__init__(SESSION, ["read", "write"], lambda: self.answer)
+        self.answer, self.got = {}, bytearray()
+
+    @method()
+    def WriteValue(self, value: "ay", options: "a{sv}"):
+        asked = pieces(self.got, value, options)
+        if asked is None:
+            return
+        self.got = bytearray()
+        try:
+            self.answer = trust.begin(str(asked["id"]), str(asked["key"]))
+        except (KeyError, TypeError, ValueError, trust.Refused) as e:
+            print("desk-bluetooth: session refused: %s" % e, flush=True)
+            self.answer = {"error": "refused"}
+
+
+refusals = {"at": 0.0}
+
+
+def refused(what, why):
+    """Said in the log, once a minute at most: a stranger's trackpad would otherwise fill it."""
+    now = asyncio.get_running_loop().time()
+    if now - refusals["at"] > 60:
+        refusals["at"] = now
+        print("desk-bluetooth: %s refused: %s" % (what, why), flush=True)
+
+
+def opened(frame, route):
+    """The lines in a steer frame, or None when it isn't the owner's (trust.py)."""
+    try:
+        return trust.unseal(trust.b64(frame[:12]), int.from_bytes(frame[12:20], "big"), route, frame[20:])
+    except trust.Refused as e:
+        return refused(route, e)
+
+
+class Join(Value):
+    """A new WiFi, handed to desk-wifi (through sudo when not root, as server.py does). It takes up
+    to a minute or two: the phone reads the state until it is done."""
+    def __init__(self):
+        super().__init__(JOIN, ["read", "write"], lambda: self.state)
+        self.state, self.got = {"state": "idle"}, bytearray()
+
+    @method()
+    def WriteValue(self, value: "ay", options: "a{sv}"):
+        print("desk-bluetooth: got %d bytes" % len(value), flush=True)  # never what: a password
+        asked = pieces(self.got, value, options)
+        if asked is None:
+            return  # more pieces to come
+        self.got = bytearray()
+        if trust.claimed():  # only the owner's phone gives it a WiFi, sealed
+            try:
+                asked = json.loads(trust.unseal(str(asked["s"]), int(asked["n"]), "BT join", trust.unb64(str(asked["c"]))))
+            except (KeyError, TypeError, ValueError, AttributeError, trust.Refused) as e:
+                print("desk-bluetooth: join refused: %s" % e, flush=True)
+                self.state = {"state": "done", "error": "refused: only the desk's owner gives it a WiFi"}
+                return
+        if self.state["state"] != "joining" and asked.get("ssid"):
+            self.state = {"state": "joining", "asked": asked["ssid"]}
+            asyncio.get_running_loop().create_task(self.join(asked["ssid"], asked.get("password", "")))
+
+    async def join(self, ssid, password):
+        # SymbiOS's helper where it is installed (the same program, renamed), else the desk's
+        wifi = "/usr/local/sbin/symbios-wifi" if os.path.exists("/usr/local/sbin/symbios-wifi") else "/usr/local/sbin/desk-wifi"
+        cmd = ([] if os.geteuid() == 0 else ["sudo", "-n"]) + [wifi, "add", ssid]
+        try:
+            r = await asyncio.to_thread(subprocess.run, cmd, input=password, capture_output=True, text=True, timeout=180)
+            answer = json.loads(r.stdout)
+        except (OSError, ValueError, subprocess.TimeoutExpired) as e:
+            answer = {"error": "the board could not run desk-wifi: %s" % e}
+        self.state = {"state": "done", **answer, "asked": ssid}  # answer's ssid: where the board is now
+        print("desk-bluetooth: join", json.dumps(self.state), flush=True)
+
+
+class Mouse:
+    """A mouse made through /dev/uinput, with the standard library only (no python3-evdev): cage
+    takes it as a real one, so the desk on the HDMI screen moves and clicks as with a real mouse."""
+    EV_SYN, EV_KEY, EV_REL = 0, 1, 2
+    REL_X, REL_Y, REL_WHEEL = 0, 1, 8
+    BUTTONS = {"l": 0x110, "r": 0x111, "m": 0x112}  # BTN_LEFT, BTN_RIGHT, BTN_MIDDLE
+    # ioctls from linux/uinput.h: _IOW('U', 100…102, int), _IOW('U', 3, struct uinput_setup), _IO('U', 1)
+    SET_EVBIT, SET_KEYBIT, SET_RELBIT, DEV_SETUP, DEV_CREATE = 0x40045564, 0x40045565, 0x40045566, 0x405C5503, 0x5501
+
+    def __init__(self):
+        self.fd = os.open("/dev/uinput", os.O_WRONLY | os.O_NONBLOCK)
+        for ev in (self.EV_KEY, self.EV_REL):
+            fcntl.ioctl(self.fd, self.SET_EVBIT, ev)
+        for button in self.BUTTONS.values():
+            fcntl.ioctl(self.fd, self.SET_KEYBIT, button)
+        for rel in (self.REL_X, self.REL_Y, self.REL_WHEEL):
+            fcntl.ioctl(self.fd, self.SET_RELBIT, rel)
+        # struct uinput_setup: bus (6: virtual), vendor, product, version, a name, no force feedback
+        fcntl.ioctl(self.fd, self.DEV_SETUP, struct.pack("4H80sI", 6, 0, 0, 1, b"desk phone trackpad", 0))
+        fcntl.ioctl(self.fd, self.DEV_CREATE)
+
+    def send(self, *events):
+        # struct input_event: a time (left at zero, the kernel stamps it), type, code, value
+        os.write(self.fd, b"".join(struct.pack("llHHi", 0, 0, *e) for e in events + ((self.EV_SYN, 0, 0),)))
+
+    def move(self, dx, dy):
+        self.send((self.EV_REL, self.REL_X, dx), (self.EV_REL, self.REL_Y, dy))
+
+    def press(self, button, down):
+        self.send((self.EV_KEY, self.BUTTONS.get(button, 0x110), int(down)))
+
+    def scroll(self, notches):
+        self.send((self.EV_REL, self.REL_WHEEL, notches))
+
+
+class Steer(ServiceInterface):
+    """The phone's trackpad: lines of text written without an answer, so a move costs one packet.
+    The mouse is made at the first one (cage takes a moment to see a new device)."""
+    def __init__(self):
+        super().__init__("org.bluez.GattCharacteristic1")
+        self.mouse = None
+
+    @dbus_property(access=PropertyAccess.READ)
+    def UUID(self) -> "s":
+        return STEER
+
+    @dbus_property(access=PropertyAccess.READ)
+    def Service(self) -> "o":
+        return ROOT + "/service0"
+
+    @dbus_property(access=PropertyAccess.READ)
+    def Flags(self) -> "as":
+        return ["write-without-response"]
+
+    @method()
+    def WriteValue(self, value: "ay", options: "a{sv}"):
+        text = bytes(value)
+        if trust.claimed():  # only the owner's phone steers, sealed
+            text = opened(text, "BT steer")
+            if text is None:
+                return
+        lines = text.decode(errors="replace").splitlines()
+        for line in [l for l in lines if l.startswith("p ")]:  # the slides' words go to the server, in their order
+            asyncio.get_running_loop().run_in_executor(SLIDES, slides, line[2:])
+        lines = [l for l in lines if not l.startswith("p ")]
+        if not lines:
+            return
+        if self.mouse is None:
+            try:
+                self.mouse = Mouse()
+                print("desk-bluetooth: a mouse for the phone", flush=True)
+            except OSError as e:
+                return print("desk-bluetooth: no mouse: %s (is the user in the input group?)" % e, flush=True)
+        clamp = lambda v: max(-500, min(500, int(v)))
+        for line in lines:
+            p = line.split()
+            try:
+                if p[0] == "m":
+                    self.mouse.move(clamp(p[1]), clamp(p[2]))
+                elif p[0] == "s":
+                    self.mouse.scroll(clamp(p[1]))
+                elif p[0] in ("d", "u"):
+                    self.mouse.press(p[1], p[0] == "d")
+                elif p[0] == "c":  # a click is held a little: cage drops a press released at once
+                    self.mouse.press(p[1], True)
+                    asyncio.get_running_loop().call_later(0.04, self.mouse.press, p[1], False)
+            except (IndexError, ValueError):
+                pass  # a line that makes no sense is dropped, the others still count
+            except OSError as e:
+                print("desk-bluetooth: the mouse failed: %s" % e, flush=True)
+                self.mouse = None
+                return
+
+
+SLIDES = concurrent.futures.ThreadPoolExecutor(1)  # one at a time: "next next" stays two nexts, in order
+
+
+def slides(words):
+    try:
+        ask = urllib.request.Request(DESK + "/api/slides", json.dumps({"do": words}).encode(), {"Content-Type": "application/json", **LOCAL})
+        urllib.request.urlopen(ask, timeout=60).read()
+    except OSError as e:  # a deck that isn't there, a slide past the end, the server away: the phone sees nothing change
+        print("desk-bluetooth: slides %r: %s" % (words, e), flush=True)
+
+
+class Slide(Value):
+    """The slide on show, as the server keeps it: read once when the phone connects, then sent to it
+    at each change (notify). Waits on the server's /api/slides/now, which answers when it changes."""
+    def __init__(self):
+        super().__init__(SLIDE, ["read", "notify"], lambda: self.now)
+        self.now, self.notifying = {"d": None, "i": 0, "n": 0, "b": False, "f": False}, False
+
+    @dbus_property(access=PropertyAccess.READ)
+    def Value(self) -> "ay":
+        return json.dumps(self.now).encode()
+
+    @method()
+    def StartNotify(self):
+        self.notifying = True
+
+    @method()
+    def StopNotify(self):
+        self.notifying = False
+
+    async def follow(self):
+        seq = -1
+        while True:
+            try:
+                got = await asyncio.to_thread(lambda: json.load(urllib.request.urlopen(urllib.request.Request(DESK + "/api/slides/now?after=%d" % seq, headers=LOCAL), timeout=40)))
+            except (OSError, ValueError):
+                await asyncio.sleep(3)  # the server is away (restarting): ask again
+                continue
+            if got["seq"] == seq:
+                continue
+            seq, self.now = got["seq"], {"d": got["deck"], "i": got["i"], "n": got["n"], "b": got["black"], "f": got["full"]}
+            if self.notifying:
+                self.emit_properties_changed({"Value": json.dumps(self.now).encode()})
+
+
+class Advert(ServiceInterface):
+    def __init__(self):
+        super().__init__("org.bluez.LEAdvertisement1")
+
+    @dbus_property(access=PropertyAccess.READ)
+    def Type(self) -> "s":
+        return "peripheral"
+
+    @dbus_property(access=PropertyAccess.READ)
+    def ServiceUUIDs(self) -> "as":
+        return [SERVICE]
+
+    @dbus_property(access=PropertyAccess.READ)
+    def LocalName(self) -> "s":
+        return os.uname().nodename
+
+    @method()
+    def Release(self):
+        pass
+
+
+async def main():
+    trust.start(KEYS)
+    LOCAL["X-Desk-Local"] = trust.local_pass()
+    bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+    bus.export(ROOT + "/service0", Service())
+    bus.export(ROOT + "/service0/char0", Value(WHERE, ["read"], where))
+    bus.export(ROOT + "/service0/char1", Join())
+    bus.export(ROOT + "/service0/char2", Steer())
+    slide = Slide()
+    bus.export(ROOT + "/service0/char3", slide)
+    asyncio.get_running_loop().create_task(slide.follow())
+    bus.export(ROOT + "/service0/char4", Session())
+    bus.export(ROOT + "/advert", Advert())
+    hci = (await bus.introspect("org.bluez", "/org/bluez/hci0"))
+    adapter = bus.get_proxy_object("org.bluez", "/org/bluez/hci0", hci)
+    await adapter.get_interface("org.freedesktop.DBus.Properties").call_set("org.bluez.Adapter1", "Powered", Variant("b", True))
+    await adapter.get_interface("org.bluez.GattManager1").call_register_application(ROOT, {})
+    await adapter.get_interface("org.bluez.LEAdvertisingManager1").call_register_advertisement(ROOT + "/advert", {})
+    print("desk-bluetooth: advertising", SERVICE, json.dumps(where()), flush=True)
+    await bus.wait_for_disconnect()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

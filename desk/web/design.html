@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SymbiOS design system</title>
+<!-- the desk's own stylesheets, nothing else: what is shown here is what the desk uses -->
+<link rel="stylesheet" href="css/theme.css">
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/components.css">
+<link rel="stylesheet" href="css/shell.css">
+<link rel="stylesheet" href="css/apps.css">
+<style>
+  /* the page's own layout, made of tokens too */
+  body { overflow: auto; -webkit-user-select: text; user-select: text; }
+  .page { max-width: 1120px; margin: 0 auto; padding: var(--sp-6) var(--sp-5); display: flex; flex-direction: column; gap: var(--sp-6); }
+  .page > header { display: flex; justify-content: space-between; align-items: flex-end; gap: var(--sp-4); flex-wrap: wrap; }
+  .page h1 { margin: 0; font-size: var(--fs-lg); font-weight: var(--weight); }
+  .page h2 { margin: 0 0 var(--sp-3); font-size: var(--fs-sm); font-weight: var(--weight-strong); }
+  section > p.muted { margin: 0 0 var(--sp-4); max-width: 70ch; }
+  .grid { display: grid; gap: var(--sp-4); grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+  .themes { display: grid; gap: var(--sp-4); grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+  .specimen { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-4); border: var(--line) solid var(--border); border-radius: var(--r-2); background: var(--bg); color: var(--fg); }
+  .specimen .knobs { display: flex; gap: var(--sp-2); }
+  .knob { display: flex; flex-direction: column; gap: var(--sp-1); font-size: var(--fs-xs); color: var(--muted); }
+  .knob i { width: 44px; height: 28px; border-radius: var(--r-1); border: var(--line) solid var(--border); }
+  .line-up { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); }
+  .scale { display: flex; flex-direction: column; gap: var(--sp-2); }
+  .scale > div { display: grid; grid-template-columns: 120px 1fr; align-items: center; gap: var(--sp-3); }
+  .scale code { color: var(--muted); font-size: var(--fs-xs); }
+  .space i { display: block; height: 12px; background: var(--accent); border-radius: 2px; }
+  .radius i { display: block; width: 64px; height: 40px; border: 2px solid var(--fg); }
+  .type-row { display: grid; grid-template-columns: 120px 1fr 1fr; align-items: baseline; gap: var(--sp-4); padding: var(--sp-2) 0; border-bottom: var(--line) solid var(--border); }
+  .type-row .a { font-family: var(--face-departure); } .type-row .b { font-family: var(--face-instrument); }
+  .icons { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
+  .icons span { display: grid; place-items: center; width: 40px; height: 40px; border: var(--line) solid var(--border); border-radius: var(--r-1); }
+  .icons svg { width: var(--icon); height: var(--icon); }
+  .demo-win { position: relative; height: 180px; }
+  .demo-app { position: relative; height: 380px; }
+  .demo-app .win { position: absolute; inset: 0; animation: none; }
+  .demo-win .win { position: absolute; inset: 0; animation: none; }
+  .demo-island { position: relative; display: inline-flex; }
+  .demo-island .island { position: static; transform: none; }
+  @media (max-width: 600px) { .type-row { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main class="page">
+  <header>
+    <div><p class="eyebrow">SymbiOS · next/</p><h1>The design system</h1></div>
+    <div class="seg" id="theme-pick" aria-label="Theme of this page"></div>
+  </header>
+
+  <section>
+    <h2>Colour: a theme is three knobs</h2>
+    <p class="muted">Paper (--bg), ink (--fg) and the accent. Every other colour is mixed from them in theme.css: muted text, hairlines, faint fills, the shadow, the desktop's dots. A new theme is one line. Red means one thing everywhere: a hot board, or closing.</p>
+    <div class="themes" id="themes"></div>
+  </section>
+
+  <section>
+    <h2>Type: two faces, five sizes</h2>
+    <p class="muted">Departure Mono is the desk speaking: windows, buttons, labels, numbers. Instrument Sans is for reading: notes, articles, text files. Settings lets either role wear either face. Departure is a pixel font, sharpest at 11, 22 and 44.</p>
+    <div id="type"></div>
+  </section>
+
+  <section class="grid">
+    <div><h2>Space</h2><div class="scale space" id="space"></div></div>
+    <div><h2>Radius</h2><div class="line-up radius" id="radius"></div></div>
+  </section>
+
+  <section>
+    <h2>Icons</h2>
+    <p class="muted">One line style, 2px strokes, the colour of the text around them. Sizes: 14 in rows, 16 in buttons, 20 on the dock, 32 in the launcher, 56 for a missing cover.</p>
+    <div class="icons" id="icons"></div>
+  </section>
+
+  <section>
+    <h2>Components</h2>
+    <p class="muted">What every app is built from (components.css). An app adds a style of its own only when none of these fits.</p>
+    <div class="grid">
+      <div class="card plain"><p class="eyebrow">.btn</p><div class="line-up"><button class="btn">Add</button><button class="btn solid">Save</button><button class="btn" disabled>Busy</button><button class="btn quiet">forget</button></div></div>
+      <div class="card plain"><p class="eyebrow">.ib</p><div class="line-up" id="ibs"></div></div>
+      <div class="card plain"><p class="eyebrow">.row</p><div id="rows"></div></div>
+      <div class="card plain"><p class="eyebrow">.field · .field-wrap</p><div style="display:flex;flex-direction:column;gap:var(--sp-2)"><input class="field" placeholder="Network name"><span class="field-wrap"><input class="field" type="password" value="hello123"><button class="ib" id="eye"></button></span></div></div>
+      <div class="card plain"><p class="eyebrow">.switch · .chip · .seg</p><div class="line-up"><button class="switch on"></button><button class="switch"></button><span class="chip here">Mesh Network</span><span class="chip">Meadow <button class="btn quiet">forget</button></span><span class="seg"><button class="on">Departure</button><button>Instrument</button></span></div></div>
+      <div class="card plain"><p class="eyebrow">.bar · slider · .card</p><div style="display:flex;flex-direction:column;gap:var(--sp-3)"><div class="bar"><i style="transform:scaleX(.62)"></i></div><input type="range" value="70"><div class="card gauge"><h4 class="eyebrow">Temperature</h4><div class="big">51°</div><div class="bar"><i style="transform:scaleX(.5)"></i></div><small>gab-Eve · up 4d 4h</small></div></div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>An app's pieces</h2>
+    <p class="muted">What a window's app is made of (components.css, the app layer). An app built from these wears the desk's look with no style of its own; add-ons too. Activity is made of them alone.</p>
+    <div class="grid">
+      <div class="demo-app"><div class="win focused"><div class="win-head"><div class="win-title" id="at"><span>An app</span></div><div class="win-ctrl" id="ac"></div></div>
+        <div class="win-body"><div>
+          <div class="app-bar"><span class="grow muted">.app-bar · Mesh Network · 4 nodes</span><button class="btn">Nodes</button></div>
+          <div class="app-bar" style="border-bottom:0;padding-bottom:0"><div class="chip-row"><button class="chip on">Primary</button><button class="chip">Pantheon</button><button class="chip">@ Gab</button><button class="chip">@ Lyra</button></div></div>
+          <div class="app-scroll">
+            <div class="bubble theirs"><div class="who"><span>Lyra</span><span>21:04</span></div>.bubble.theirs: the board is warm, 52°</div>
+            <div class="bubble mine"><div class="who"><span>you</span><span>21:05</span></div>.bubble.mine: thanks</div>
+            <p class="empty">.empty · Nothing here today yet.</p>
+          </div>
+          <form class="app-entry" onsubmit="return false"><input class="field" placeholder=".app-entry · Message"><button class="btn solid">Send</button></form>
+        </div></div></div></div>
+      <div class="card plain"><p class="eyebrow">.work · [data-empty]</p>
+        <div class="work"><span class="name">Making searchable: Ghost font</span><div class="bar"><i style="transform:scaleX(.62)"></i></div><span class="time">12 s</span></div>
+        <div class="work"><span class="name">Transcribing: memo 17-26</span><div class="bar"><i style="transform:scaleX(.2)"></i></div><span class="time">running</span></div>
+        <div class="work pending"><span class="name">Making the deck: Pitch</span><div class="bar"><i></i></div><span class="time">pending</span></div>
+        <div style="margin-top:var(--sp-3)" data-empty="Nothing running."></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>The shell's pieces</h2>
+    <p class="muted">The desktop's own parts (shell.css): a window, the dock's islands, the quick panel's tiles.</p>
+    <div class="grid">
+      <div class="demo-win"><div class="win focused"><div class="win-head"><div class="win-title" id="wt"><span>Quiet Album</span></div><div class="win-ctrl" id="wc"></div></div><div class="win-body"><div style="padding:var(--sp-3)" id="wrows"></div></div></div></div>
+      <div style="display:flex;flex-direction:column;gap:var(--sp-4);align-items:flex-start">
+        <div class="demo-island"><div class="island" id="isl"></div></div>
+        <div class="qs-grid" style="width:340px" id="tiles"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script type="module">
+  import { I } from "./js/shared/icons.js";
+  import { THEMES, applyTheme, currentTheme, initTheme } from "./js/shared/theme.js";
+  initTheme();
+  const $ = id => document.getElementById(id);
+  const h = (html) => { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstChild; };
+
+  // the app layer's demo window: its title and controls, as the desk's windows have them
+  $("at").insertAdjacentHTML("afterbegin", I.termnl);
+  $("ac").innerHTML = `<button class="win-btn">${I.min}</button><button class="win-btn">${I.max}</button><button class="win-btn close">${I.close}</button>`;
+
+  // the page's own theme
+  const pick = $("theme-pick");
+  const paintPick = () => pick.replaceChildren(...THEMES.map(id => { const b = h(`<button>${id}</button>`); b.classList.toggle("on", currentTheme() === id); b.onclick = () => { applyTheme(id); paintPick(); }; return b; }));
+  paintPick();
+
+  // every theme, each with its knobs and a few pieces wearing it
+  $("themes").replaceChildren(...THEMES.map(id => h(`<div class="specimen" data-theme="${id}">
+    <div class="line-up" style="justify-content:space-between"><b style="text-transform:capitalize">${id}</b>
+      <span class="knobs"><span class="knob"><i style="background:var(--bg)"></i>paper</span><span class="knob"><i style="background:var(--fg)"></i>ink</span><span class="knob"><i style="background:var(--accent)"></i>accent</span></span></div>
+    <div class="line-up"><span class="knob"><i style="background:var(--muted)"></i>muted</span><span class="knob"><i style="background:var(--hair)"></i>hair</span><span class="knob"><i style="background:var(--border)"></i>border</span><span class="knob"><i style="background:var(--accent-soft)"></i>accent-soft</span><span class="knob"><i style="background:var(--danger)"></i>danger</span></div>
+    <div class="card" style="display:flex;flex-direction:column;gap:var(--sp-1)"><p class="eyebrow">In range</p>
+      <div class="row here"><span class="g">${I.wifi}</span><span class="name">Mesh Network</span><span class="meta">${I.lockSmall}</span></div>
+      <div class="row"><span class="g">${I.wifi}</span><span class="name">Meadow</span><span class="meta">paired</span></div></div>
+    <div class="line-up"><button class="btn">Add</button><button class="btn solid">Save</button><button class="switch on"></button><span class="chip here">here</span><span class="muted">muted text</span><span class="hot">76°</span></div>
+  </div>`)));
+
+  // type
+  const SIZES = [["--fs-xs", "11px", "meta, labels, CAPITALS"], ["--fs-sm", "13px", "the desk's body: rows, buttons"], ["--fs-md", "15px", "reading"], ["--fs-lg", "22px", "titles, big numbers"], ["--fs-xl", "44px", "the lock screen"]];
+  $("type").replaceChildren(h(`<div class="type-row muted"><span>size</span><span>Departure Mono · the desk</span><span>Instrument Sans · reading</span></div>`),
+    ...SIZES.map(([v, px, use]) => h(`<div class="type-row"><span><code>${v}</code><br><small class="muted">${px} · ${use}</small></span>
+      <span class="a" style="font-size:var(${v})">Quiet Album 14:30</span><span class="b" style="font-size:var(${v})">A note kept on the desk</span></div>`)));
+
+  // space and radius
+  $("space").replaceChildren(...[1, 2, 3, 4, 5, 6].map(n => h(`<div><code>--sp-${n} · ${getComputedStyle(document.documentElement).getPropertyValue("--sp-" + n).trim()}</code><i style="width:calc(var(--sp-${n}) * 4)"></i></div>`)));
+  $("radius").replaceChildren(...[["--r-1", "rows, fields, chips"], ["--r-2", "cards, windows, tiles"], ["--r-3", "the dock's islands"], ["--r-round", "switches, round buttons"]].map(([v, use]) => h(`<div style="display:flex;flex-direction:column;gap:var(--sp-1)"><i style="border-radius:var(${v})"></i><code>${v}</code><small class="muted">${use}</small></div>`)));
+
+  // icons
+  const skip = new Set(["max", "min", "close"]);
+  $("icons").replaceChildren(...Object.entries(I).filter(([k]) => !skip.has(k)).map(([k, svg]) => { const s = h(`<span title="${k}">${svg}</span>`); return s; }));
+
+  // components that need glyphs
+  $("ibs").replaceChildren(h(`<button class="ib">${I.newfolder}</button>`), h(`<button class="ib" disabled>${I.trash}</button>`), h(`<button class="ib round">${I.settings}</button>`), h(`<button class="ib big">${I.play}</button>`));
+  $("eye").innerHTML = I.eye;
+  $("rows").replaceChildren(h(`<button class="row here"><span class="g">${I.track}</span><span class="name">Tone 1</span><span class="meta">0:20</span></button>`),
+    h(`<button class="row"><span class="g">${I.track}</span><span class="name">Tone 2</span><span class="meta">0:25</span></button>`),
+    h(`<div class="row"><span class="g">${I.bluetooth}</span><span class="name">Stereo salon</span><span class="meta">paired</span></div>`));
+  $("wt").insertAdjacentHTML("afterbegin", I.album);
+  $("wc").innerHTML = `<button class="win-btn">${I.min}</button><button class="win-btn">${I.max}</button><button class="win-btn close">${I.close}</button>`;
+  $("wrows").replaceChildren(...["01 - Tone 1", "02 - Tone 2", "cover.jpg"].map((n, i) => h(`<div class="fitem${i === 0 ? " sel" : ""}"><span class="ficon">${i < 2 ? I.track : I.picture}</span><span class="fname">${n}</span><span class="fline">${i < 2 ? "#" + (i + 1) + " · 98 KB" : "picture · 2.6 KB"}</span></div>`)));
+  $("isl").innerHTML = `<button class="nowchip show"><span class="eq play"><i></i><i></i><i></i></span><span class="ttl">Tone 1</span></button><button class="tray"><span class="tray-ic">${I.mesh}</span><span class="tray-ic">${I.wifi}</span><span class="clock"><span>14:30</span><small>Mon, Nov 23</small></span></button>`;
+  $("tiles").innerHTML = `<button class="qtog on"><span class="ic">${I.wifi}</span><span><b>Wi-Fi</b><small>Mesh Network</small></span><span class="more">⌄</span></button>
+    <button class="qtog"><span class="ic">${I.bluetooth}</span><span><b>Bluetooth</b><small>On</small></span><span class="more">⌄</span></button>`;
+</script>
+</body>
+</html>

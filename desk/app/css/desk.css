@@ -1,0 +1,115 @@
+/* desk.css — what symbios had no equivalent for: the assistant, the command log, and the
+   one-window-at-a-time layout on a small screen. Colours only through the theme tokens. */
+
+/* windows are custom elements here; size comes from the browser's own resize corner */
+desk-window.win { resize: both; }
+desk-window.win.maxed { left: 0 !important; top: 0 !important; width: 100% !important; height: calc(100% - var(--dock-reserve)) !important; resize: none; border-radius: 0; }
+.win-body > * { display: flex; flex-direction: column; height: 100%; }
+
+.pane { flex: 1; min-height: 0; overflow: auto; padding: 12px; font-size: 13px; line-height: 1.5; }
+.entry { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--panel-border); }
+.entry input { flex: 1; min-width: 0; background: var(--bg); color: var(--fg); border: 1px solid var(--panel-border); padding: 7px 10px; font: inherit; font-size: 13px; outline: none; }
+.entry input:focus { border-color: var(--accent); }
+.entry button, .chips button, app-assistant .it button { background: var(--bg); color: var(--fg); border: 1px solid var(--fg); padding: 3px 11px; cursor: pointer; font: inherit; font-size: 13px; }
+.entry button:hover, .chips button:hover, app-assistant .it button:hover { background: var(--fg); color: var(--bg); }
+pre { font: inherit; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+app-assistant .pane, app-ask .pane { display: flex; flex-direction: column; gap: 8px; }
+app-assistant .me, app-ask .me { align-self: flex-end; max-width: 85%; background: var(--fg); color: var(--bg); padding: 5px 10px; }
+app-assistant .it, app-ask .it { align-self: flex-start; max-width: 92%; background: var(--hair); border: 1px solid var(--panel-border); padding: 5px 10px; }
+app-assistant table { border-collapse: collapse; white-space: normal; }
+app-assistant td { padding: 2px 0; vertical-align: top; }
+app-assistant td:first-child { color: var(--muted); padding-right: 16px; white-space: nowrap; }
+app-assistant th { text-align: left; font-weight: normal; color: var(--muted); padding: 2px 16px 2px 0; }
+app-assistant td + td { padding-right: 16px; }
+app-assistant td[data-level] { background: var(--fg); color: var(--bg); padding: 0 5px; }
+app-assistant .mark svg { width: .9em; height: .9em; vertical-align: -.1em; margin-right: .35em; }
+app-assistant .answers { display: flex; gap: 6px; margin-top: 6px; }
+app-assistant .answers button:disabled { opacity: .4; cursor: default; }
+.chips { display: flex; gap: 6px; overflow-x: auto; padding: 8px 8px 0; scrollbar-width: none; }
+.chips button { white-space: nowrap; border-color: var(--panel-border); color: var(--muted); font-size: 12px; }
+
+/* a command and what became of it: ran, simulated, on the desk, refused */
+.cmd { color: var(--muted); overflow-wrap: anywhere; }
+.cmd::before { content: "$ "; }
+.cmd[data-how]::after { content: attr(data-how); margin-left: 8px; padding: 0 5px; border: 1px solid currentColor; font-size: 11px; }
+.cmd[data-how="ran"], .cmd[data-how="on the desk"] { color: var(--accent); }
+.cmd[data-how="refused"], .cmd[data-how="failed"] { background: var(--fg); color: var(--bg); }
+app-terminal .pane > * + * { margin-top: 8px; }
+app-terminal .note { color: var(--muted); }
+/* near the board: the real shell (xterm.js) and the log, one at a time */
+app-terminal .log { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+app-terminal .shell { flex: 1; min-height: 0; padding: 8px; overflow: hidden; }
+app-terminal [hidden] { display: none; }
+app-terminal .chips { padding-bottom: 8px; border-bottom: 1px solid var(--panel-border); }
+app-terminal .chips button[aria-pressed="true"] { color: var(--fg); border-color: var(--fg); }
+
+/* the reader: symbios's styles (apps.css) do the page; these are what a kept article adds */
+app-reader .inner .by { opacity: .65; font-size: 12px; }
+app-reader .inner blockquote { margin: 0 0 12px; padding-left: 14px; border-left: 2px solid var(--fg); opacity: .85; }
+app-reader .inner pre, app-reader .inner code { background: var(--hair); font-size: 13px; }
+app-reader .inner pre { padding: 10px; overflow-x: auto; white-space: pre; margin: 0 0 12px; }
+app-reader .inner hr { border: 0; border-top: 1px solid var(--panel-border); margin: 18px 0; }
+app-reader .inner table { border-collapse: collapse; margin: 0 0 12px; font-size: 13px; }
+app-reader .inner td, app-reader .inner th { border: 1px solid var(--panel-border); padding: 3px 8px; text-align: left; }
+app-reader .home a { cursor: pointer; }
+
+/* Ask: a chat like the Assistant's (Gab, 2026-10-23), its documents inside the answer; the Assistant shows them the same way (@doc) */
+app-ask .it:has(.hit), app-assistant .it:has(.hit) { width: 92%; }
+app-ask .hit, app-assistant .it .hit { display: block; width: 100%; text-align: left; margin-top: 6px; background: var(--bg); color: var(--fg); border: 1px solid var(--panel-border); padding: 6px 10px; cursor: pointer; font: inherit; font-size: 13px; }
+app-ask .hit:hover, app-ask .hit:focus-visible, app-assistant .it .hit:hover, app-assistant .it .hit:focus-visible { border-color: var(--fg); outline: none; }
+app-ask .hit .top, app-assistant .it .hit .top { display: flex; gap: 10px; align-items: baseline; }
+app-ask .hit .score, app-assistant .it .hit .score { color: var(--accent); font-variant-numeric: tabular-nums; }
+app-ask .hit .title, app-assistant .it .hit .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+app-ask .hit .kind, app-assistant .it .hit .kind { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+app-ask .hit .passage, app-assistant .it .hit .passage { color: var(--muted); margin-top: 3px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+app-system .activity { padding: 0 16px 14px; }
+app-system .activity h4 { margin: 0 0 6px; font-weight: 400; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+app-system .tasks { max-height: 168px; overflow: hidden auto; font-size: 13px; }
+app-system .tasks:empty::before { content: attr(data-empty); color: var(--muted); }
+app-system .task { display: grid; grid-template-columns: minmax(0, 1fr) 30% 8ch; gap: 10px; align-items: center; padding: 6px 0; border-top: 1px solid var(--panel-border); }
+app-system .task:first-child { border-top: 0; }
+app-system .task .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+app-system .task .bar { height: 5px; border-radius: 3px; background: var(--panel-border); overflow: hidden; }
+app-system .task .bar i { display: block; height: 100%; background: var(--accent); transform-origin: left; transform: scaleX(0); }
+app-system .task .time { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+app-system .task.pending .bar { visibility: hidden; }
+app-system .groups { padding: 0 16px 14px; color: var(--muted); font-size: 12px; }
+app-system .wifi { padding: 12px 16px 16px; border-top: 1px solid var(--panel-border); font-size: 13px; display: flex; flex-direction: column; gap: 8px; }
+app-system .wifi h4 { margin: 0; font-weight: 400; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+app-system .wifi a { color: var(--accent); }
+app-system .wifi small { color: var(--muted); }
+app-system .wifi .known { display: flex; flex-wrap: wrap; gap: 6px; }
+app-system .wifi .known span { border: 1px solid var(--panel-border); padding: 2px 8px; display: inline-flex; gap: 8px; align-items: center; }
+app-system .wifi .known button { background: none; border: 0; color: var(--muted); font: inherit; font-size: 11px; cursor: pointer; text-decoration: underline; padding: 0; }
+app-system .wifi .entry { padding: 0; border: 0; flex-wrap: wrap; }
+app-system .wifi .entry input { flex: 1 1 140px; }
+
+/* small screens: one window at a time, full width, above the dock */
+@media (max-width: 760px) {
+  desk-window.win { left: 0 !important; top: 0 !important; width: 100% !important; height: calc(100% - var(--dock-reserve)) !important; resize: none; border-radius: 0; }
+  desk-window.win:not(.focused) { display: none; }
+  /* the dock spans the screen and its tiles share the width, so all eight fit on a phone */
+  #dock-center { bottom: 14px; left: 14px; right: 14px; transform: none; max-width: none; padding: 8px 6px; }
+  #dock-center .dock-apps { flex: 1; gap: 2px; }
+  #dock-center .tile { flex: 1 1 0; width: auto; min-width: 36px; }
+  #dock-right { display: none; }
+  .explorer .cols { flex-direction: column; }
+}
+
+/* buttons follow the one typeface (the tray clock is a button) */
+button, input { font-family: var(--font); }
+
+/* brightness: a black veil over everything, as symbios dims (it never goes fully dark) */
+#dim { z-index: 9999; }
+
+app-editor .entry { border-top: 0; border-bottom: 1px solid var(--panel-border); align-items: center; }
+app-editor .entry span { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+app-editor .editor { flex: 1; padding: 14px; font-size: 13px; }
+.explorer .vhead button { background: var(--bg); color: var(--fg); border: 1px solid var(--fg); padding: 3px 11px; cursor: pointer; font-size: 13px; }
+.explorer .vhead button:hover { background: var(--fg); color: var(--bg); }
+.explorer .vhead button[hidden] { display: none; }
+
+/* a file dragged over the desk: it will go to ~/Inbox */
+#desktop.dropping { outline: 3px dashed var(--fg); outline-offset: -8px; }

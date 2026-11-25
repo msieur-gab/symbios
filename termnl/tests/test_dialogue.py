@@ -1,0 +1,838 @@
+"""python3 -m unittest — the dialogue, against the pretend device."""
+import os
+import unittest
+
+from termnl.agent import Agent
+from termnl.load import load_language
+from tests.device import device
+
+lang = load_language("en")
+
+
+def agent(settings=None):
+    return Agent(**lang, settings=settings or {}, device=device, random=lambda: 0)
+
+
+class Dialogue(unittest.TestCase):
+    def test_skill_files_have_no_problems(self):
+        self.assertEqual(lang["errors"], [])
+
+    def test_every_weight_of_the_model_fits_in_one_byte(self):
+        for k in ("action", "object"):
+            m = lang["model"][k]
+            self.assertGreater(m["scale"], 0)
+            self.assertTrue(all(isinstance(x, int) and -127 <= x <= 127 for row in m["weights"].values() for x in row[1:]), k)
+
+    def test_a_template_request_acts_with_values_quoted(self):
+        r = agent().hear("create a file named sprout.md in the ideas folder")
+        self.assertEqual(r["outcome"], "act")
+        self.assertEqual(r["command"], "touch $HOME'/ideas/sprout.md'")
+
+    def test_a_missing_name_is_asked_for_and_the_answer_completes_the_request(self):
+        a = agent()
+        self.assertEqual(a.hear("make a new folder")["outcome"], "ask")
+        r = a.hear("bike photos")
+        self.assertEqual(r["outcome"], "act")
+        self.assertEqual(r["command"], "mkdir -p $HOME'/bike photos'")
+
+    def test_a_folder_not_on_the_device_is_asked_about_with_the_real_folders_as_chips(self):
+        a = agent()
+        r = a.hear("create a folder called seeds in the garden folder")
+        self.assertEqual(r["outcome"], "ask")
+        self.assertIn("ideas", r["chips"])
+        self.assertEqual(a.hear("ideas")["command"], "mkdir -p $HOME'/ideas/seeds'")
+
+    def test_a_file_type_gives_the_extension_markdown_by_default(self):
+        self.assertEqual(agent().hear("create a python file called test")["command"], "touch $HOME'/test.py'")
+        self.assertEqual(agent().hear("make a new file named todo")["command"], "touch $HOME'/todo.md'")
+
+    def test_admin_mode_off_nothing_that_needs_admin_runs(self):
+        r = agent().hear("restart the pi")
+        self.assertEqual(r["outcome"], "abstain")
+        self.assertEqual(r["reason"], "admin mode off")
+
+    def test_admin_mode_on_approval_every_time(self):
+        a = agent({"admin mode": "on"})
+        self.assertEqual(a.hear("turn off the wifi")["outcome"], "approve")
+        self.assertEqual(a.hear("yes")["command"], "iw dev | grep -o 'Interface .*' | cut -d' ' -f2 | xargs -I@ ip link set @ down")
+        self.assertEqual(a.hear("turn off the wifi")["outcome"], "approve")
+        self.assertEqual(a.hear("no")["reason"], "declined")
+
+    def test_other_wording_the_model_understands_and_checks_first_when_a_word_is_new(self):
+        a = agent()
+        r = a.hear("is there enough space for a movie")
+        self.assertEqual(r["skill"], "check-storage")
+        self.assertEqual(r["outcome"], "ask")
+        self.assertIn("movie", r["unknown"])
+        y = a.hear("yes")
+        self.assertEqual((y["outcome"], y["reads"]), ("act", "storage"))
+        self.assertEqual(y["teach"], {"skill": "check-storage", "text": "is there enough space for a movie"})
+
+    def test_nothing_understood_abstain_and_the_sentence_goes_to_the_inbox(self):
+        r = agent().hear("what's the weather tomorrow")
+        self.assertEqual(r["outcome"], "abstain")
+        self.assertEqual(r["inbox"], "what's the weather tomorrow")
+
+    def test_a_name_cant_inject_a_command(self):
+        r = agent().hear("create a folder called x'; rm -rf ~; echo '")
+        self.assertEqual(r["outcome"], "act")
+        self.assertTrue(r["command"].startswith("mkdir -p $HOME'/x'\\''"))
+
+    # Gab's first request in the playground, 22 Oct, and its relatives: a name must never swallow a
+    # place, and a misspelled folder is confirmed, never ignored.
+    def test_add_a_new_note_inside_my_documets_the_folder_is_confirmed_then_the_name_asked(self):
+        a = agent()
+        r = a.hear("add a new note inside my documets")
+        self.assertEqual(r["outcome"], "ask")
+        self.assertIn("Documents", r["say"])
+        self.assertEqual(a.hear("yes")["outcome"], "ask")
+        self.assertEqual(a.hear("shopping list")["command"], "touch $HOME'/Documents/shopping list.md'")
+
+    def test_a_misspelled_folder_can_be_refused_and_chosen_from_the_list(self):
+        a = agent()
+        a.hear("make a folder called seeds in documets")
+        r = a.hear("no")
+        self.assertEqual(r["outcome"], "ask")
+        self.assertIn("ideas", r["chips"])
+        self.assertEqual(a.hear("ideas")["command"], "mkdir -p $HOME'/ideas/seeds'")
+
+    def test_a_name_never_starts_with_a_place_word(self):
+        self.assertEqual(agent().hear("make a folder for my bike photos")["outcome"], "ask")
+        self.assertEqual(agent().hear("create a file in documents")["outcome"], "ask")
+
+    def test_a_place_without_a_name_the_name_is_asked_the_place_kept(self):
+        a = agent()
+        self.assertEqual(a.hear("create a file in documents")["outcome"], "ask")
+        self.assertEqual(a.hear("draft")["command"], "touch $HOME'/Documents/draft.md'")
+
+    def test_another_name_for_a_folder_still_finds_it(self):
+        self.assertEqual(agent().hear("new folder called bikes inside docs")["command"], "mkdir -p $HOME'/Documents/bikes'")
+
+    # Follow-ups (22 Oct, Gab's playground run): an answer to a question is an answer, unless the
+    # person clearly asks for something else.
+    def test_an_answer_that_is_also_a_skill_word_fills_the_question_no_loop(self):
+        a = agent()
+        a.hear("add a new note inside my documets")
+        a.hear("Documents")
+        self.assertEqual(a.hear("note")["reason"], "already exists")  # Documents already has a note.md
+        b = agent()
+        b.hear("add a new note inside my documets")
+        b.hear("Documents")
+        self.assertEqual(b.hear("memo")["command"], "touch $HOME'/Documents/memo.md'")
+
+    def test_the_same_request_said_again_completes_the_question_with_what_it_adds(self):
+        a = agent()
+        a.hear("create a file in documents")
+        self.assertEqual(a.hear("create a file called draft")["command"], "touch $HOME'/Documents/draft.md'")
+
+    def test_a_clearly_different_request_replaces_the_question(self):
+        a = agent()
+        a.hear("create a file in documents")
+        self.assertEqual(a.hear("how much space is left")["skill"], "check-storage")
+
+    def test_the_folder_confirmed_earlier_is_kept_until_the_file_is_made(self):
+        a = agent()
+        a.hear("add a new note inside my documets")
+        a.hear("Documents")
+        self.assertEqual(a.hear("note.txt")["command"], "touch $HOME'/Documents/note.txt'")
+
+    # Gab's run, 22 Oct 10:25: opening a file.
+    def test_open_this_file_a_pointing_word_is_never_a_name_so_the_file_is_asked(self):
+        r = agent().hear("open this file")
+        self.assertEqual(r["outcome"], "ask")
+        self.assertEqual(r["skill"], "open-file")
+
+    def test_can_you_please_open_the_note_md_opens_it(self):
+        self.assertEqual(agent().hear("can you please open the note.md")["command"], "xdg-open $HOME'/note.md'")
+
+    def test_open_the_note_md_file_located_inside_my_documents_folder_opens_it_there(self):
+        r = agent().hear("can you please open the note.md file located inside my Documents folder")
+        self.assertEqual(r["command"], "xdg-open $HOME'/Documents/note.md'")
+
+    def test_opening_an_app_still_opens_the_app(self):
+        self.assertEqual(agent().hear("open the terminal")["command"], "setsid 'x-terminal-emulator'")
+
+    # Where you are (Gab, 22 Oct 10:30: "if i say open or go to Documents folder i imagine getting
+    # inside its directory"). Files are found on the device, not assumed.
+    def test_opening_a_folder_goes_into_it_a_file_is_then_opened_there(self):
+        a = agent()
+        r = a.hear("open the documents folder")
+        self.assertEqual((r["reads"], r["args"]), ("folder", {"place": "$HOME/Documents"}))
+        self.assertEqual(a.here["label"], "Documents")
+        self.assertEqual(a.hear("open note.md")["command"], "xdg-open $HOME'/Documents/note.md'")
+
+    def test_go_to_ideas_then_creating_a_file_makes_it_there(self):
+        a = agent()
+        a.hear("go to ideas")
+        self.assertEqual(a.hear("create a file called plan")["command"], "touch $HOME'/ideas/plan.md'")
+
+    def test_showing_a_folder_lists_it_without_going_into_it(self):
+        a = agent()
+        a.hear("show me downloads")
+        self.assertEqual(a.here["label"], "home")
+
+    def test_a_file_not_here_but_in_one_other_folder_asked_then_opened_there(self):
+        a = agent()
+        r = a.hear("open report.pdf")
+        self.assertEqual(r["outcome"], "ask")
+        self.assertIn("Documents", r["say"])
+        self.assertEqual(a.hear("yes")["command"], "xdg-open $HOME'/Documents/report.pdf'")
+
+    def test_the_same_name_in_several_folders_which_one_with_chips(self):
+        a = agent()
+        a.hear("go to downloads")
+        r = a.hear("open note.md")
+        self.assertEqual(r["outcome"], "ask")
+        self.assertEqual(sorted(r["chips"]), ["Documents", "home", "ideas"])
+        self.assertEqual(a.hear("ideas")["command"], "xdg-open $HOME'/ideas/note.md'")
+
+    def test_a_name_without_its_extension_and_a_typo_still_find_the_file(self):
+        a = agent()
+        a.hear("go to documents")
+        self.assertEqual(a.hear("open groceries")["command"], "xdg-open $HOME'/Documents/groceries.md'")
+        r = a.hear("open grocries.md")
+        self.assertEqual(r["outcome"], "ask")
+        self.assertIn("groceries.md", r["say"])
+
+    def test_a_file_found_nowhere_is_said_so_and_nothing_runs(self):
+        r = agent().hear("open taxes.pdf")
+        self.assertIsNone(r.get("command"))
+        self.assertIn("taxes.pdf", r["say"])
+
+    def test_creating_a_file_that_already_exists_runs_nothing(self):
+        r = agent().hear("create a file called seed.md in ideas")
+        self.assertIsNone(r.get("command"))
+        self.assertIn("already", r["say"])
+
+    # Review of 22 Oct: approval comes last, once every value is known, and shows the command.
+    def test_approval_is_never_asked_with_a_value_missing(self):
+        a = agent({"admin mode": "on"})
+        r = a.hear("the service is stuck, restart it")
+        self.assertEqual(r["outcome"], "ask")
+        self.assertNotIn("Restart ?", r["say"])
+        self.assertEqual(a.hear("yes")["outcome"], "ask")  # which service?
+        p = a.hear("ssh")
+        self.assertEqual(p["outcome"], "approve")
+        self.assertIn("ssh", p["say"])
+        self.assertIsNone(p.get("command"))
+        self.assertEqual(a.hear("yes")["command"], "systemctl restart 'ssh'")
+
+    def test_not_surely_understood_with_every_value_known_one_question_the_approval(self):
+        a = agent({"admin mode": "on"})
+        r = a.hear("the music server is stuck, restart it")
+        self.assertEqual(r["skill"], "restart-service")
+        self.assertIn("Restart music server?", r["say"])
+        self.assertEqual(a.hear("yes")["command"], "systemctl restart 'mpd'")
+
+    def test_show_commands_on_the_approval_shows_the_command_it_would_run(self):
+        r = agent({"admin mode": "on", "show commands": "on"}).hear("restart the pi")
+        self.assertEqual(r["outcome"], "approve")
+        self.assertEqual(r["show"], "systemctl reboot")
+        self.assertIsNone(r.get("command"))
+        self.assertIsNone(agent({"admin mode": "on"}).hear("restart the pi").get("show"))
+
+    # Review of 22 Oct: an answer to "What should I call it?" is not always a name.
+    def test_no_to_a_name_question_stops_yes_asks_again_neither_becomes_a_name(self):
+        a = agent()
+        a.hear("make a new folder")
+        n = a.hear("no")
+        self.assertIsNone(n.get("command"))
+        self.assertEqual(n["outcome"], "abstain")
+        self.assertIsNone(a.pending)
+        b = agent()
+        b.hear("make a new folder")
+        y = b.hear("yes")
+        self.assertEqual(y["outcome"], "ask")
+        self.assertIsNone(y.get("command"))
+        self.assertEqual(b.hear("bikes")["command"], "mkdir -p $HOME'/bikes'")
+
+    def test_call_it_bikes_the_name_is_what_follows(self):
+        for said, name in [("call it bikes", "bikes"), ("name it recipes", "recipes"), ("called seeds", "seeds"), ("let's call it yes", "yes")]:
+            a = agent()
+            a.hear("make a new folder")
+            self.assertEqual(a.hear(said)["command"], "mkdir -p $HOME'/%s'" % name, said)
+
+    # 25 Oct (fix A): an answer is read as typed, never from words re-ordered for reading ("switch … off").
+    def test_a_name_answered_is_the_words_typed_never_cut(self):
+        for said in ("switch it off", "turn it off"):
+            a = agent()
+            a.hear("make a new folder")
+            self.assertEqual(a.hear(said)["command"], "mkdir -p $HOME'/%s'" % said, said)
+
+    # Review of 22 Oct: a place the device doesn't have is asked about, never folded into the name.
+    def test_an_unknown_place_is_asked_never_swallowed_by_the_name(self):
+        for said in ["make a folder called seeds in garden", "create a note called groceries in garden"]:
+            a = agent()
+            r = a.hear(said)
+            self.assertEqual(r["outcome"], "ask", said)
+            self.assertIn("garden", r["say"])
+            self.assertIn("ideas", r["chips"])
+        a = agent()
+        a.hear("make a folder called seeds in garden")
+        self.assertEqual(a.hear("ideas")["command"], "mkdir -p $HOME'/ideas/seeds'")
+
+    def test_a_known_place_after_the_name_still_works(self):
+        self.assertEqual(agent().hear("make a folder called seeds in ideas")["command"], "mkdir -p $HOME'/ideas/seeds'")
+        self.assertEqual(agent().hear("create a note called photos of paris")["command"], "touch $HOME'/photos of paris.md'")
+
+    # Review of 22 Oct: a request with "not", "don't"… is never acted on as if it were positive.
+    def test_a_negated_request_is_never_acted_on(self):
+        for said in ["do not reboot the pi", "don't turn off the wifi", "don't create a folder called bikes", "never restart ssh"]:
+            a = agent({"admin mode": "on"})
+            r = a.hear(said)
+            self.assertEqual(r["outcome"], "ask", said)
+            self.assertIsNone(r.get("command"), said)
+            self.assertEqual(r["chips"], ["yes", "no"])
+        a = agent({"admin mode": "on"})
+        a.hear("do not reboot the pi")
+        self.assertEqual(a.hear("no")["outcome"], "abstain")
+
+    def test_a_negated_request_still_needs_its_approval_after_a_yes(self):
+        a = agent({"admin mode": "on"})
+        a.hear("I don't need wifi right now, switch it off")
+        self.assertEqual(a.hear("yes")["outcome"], "approve")
+        self.assertEqual(a.hear("yes")["command"], "iw dev | grep -o 'Interface .*' | cut -d' ' -f2 | xargs -I@ ip link set @ down")
+
+    def test_reading_is_not_held_back_by_a_negation(self):
+        for said in ["is the board not overheating", "is my memory not full"]:
+            self.assertEqual(agent().hear(said)["outcome"], "act", said)
+
+
+    # Gab's first test on Eve, 22 Oct: seven "yes" in a row after his question was lost.
+    def test_a_lone_yes_or_no_with_nothing_waiting_says_so(self):
+        for said in ["yes", "no"]:
+            r = agent().hear(said)
+            self.assertEqual(r["reason"], "nothing waiting")
+            self.assertIsNone(r.get("skill"))
+
+    # A skill that only reads names its reader: no command, the reply comes from what the device says.
+    def test_a_reading_skill_reads_instead_of_running_a_command(self):
+        r = agent().hear("how hot is the board")
+        self.assertEqual((r["outcome"], r["reads"]), ("act", "temperature"))
+        self.assertIsNone(r.get("command"))
+
+    def test_gabs_new_sentences_reach_the_new_skills(self):
+        self.assertEqual(agent().hear("what is this device configuration")["skill"], "show-system")
+        for said in ["what is taking my memory", "what is consuming my ram"]:
+            self.assertEqual(agent().hear(said)["skill"], "show-process", said)
+
+
+    # Wi-Fi, the network and Bluetooth: the skill's command runs and is shown, and a reader turns its output into words.
+    def test_a_reader_of_a_commands_output_runs_the_skills_command_and_shows_it(self):
+        r = agent({"show commands": "on"}).hear("what is my IP address")
+        self.assertEqual((r["outcome"], r["reads"], r["command"], r["show"]), ("act", "network", "ip -4 -brief addr", "ip -4 -brief addr"))
+
+    # Gab, 22 Oct: "is bluetooth on" is the board's own Bluetooth, though a service has the same name
+    def test_an_object_word_is_the_object_not_a_service_of_the_same_name(self):
+        for said in ["is bluetooth on", "is the bluetooth working"]:
+            r = agent().hear(said)
+            self.assertEqual((r["outcome"], r.get("skill")), ("act", "check-bluetooth"), said)
+        self.assertEqual(agent().hear("is ssh running")["skill"], "check-service")
+
+    # Gab asked the time five times on 22 Oct; it was out of scope by oversight.
+    def test_the_time_and_the_date_are_read_and_an_alarm_is_still_out_of_scope(self):
+        for said in ["what time is it?", "what is the date today", "what day is it"]:
+            r = agent().hear(said)
+            self.assertEqual((r["outcome"], r.get("skill"), r.get("reads")), ("act", "check-time", "clock"), said)
+        self.assertEqual(agent().hear("set an alarm for seven")["outcome"], "abstain")
+
+    # Gab's second run, 22 Oct: "list the files inside my home", "cd ..".
+    def test_listing_a_folders_files(self):
+        for said, place in [("list the files inside my home", "$HOME"), ("what do I have in downloads", "$HOME/Downloads"),
+                            ("show me the files in documents", "$HOME/Documents"), ("list my files", "$HOME")]:
+            r = agent().hear(said)
+            self.assertEqual((r["outcome"], r.get("skill"), r.get("reads")), ("act", "show-folder", "folder"), said)
+            self.assertEqual(r["args"]["place"], place, said)
+        a = agent()
+        a.hear("go to ideas")
+        self.assertEqual(a.hear("what's in here")["args"]["place"], "$HOME/ideas")
+
+    def test_the_same_request_without_the_unknown_place_uses_where_you_are(self):
+        a = agent()
+        self.assertEqual(a.hear("what do I have in the garden")["outcome"], "ask")
+        r = a.hear("list my files")
+        self.assertEqual((r["outcome"], r["args"]["place"]), ("act", "$HOME"))
+
+    def test_going_up_a_folder(self):
+        for said in ["cd ..", "go back", "go up a folder", "leave this folder"]:
+            a = agent()
+            a.hear("go to documents")
+            r = a.hear(said)
+            self.assertEqual((r["outcome"], r.get("skill")), ("act", "leave-folder"), said)
+            self.assertEqual(a.here["label"], "home", said)
+
+    def test_going_up_from_home_says_so(self):
+        r = agent().hear("cd ..")
+        self.assertEqual(r["outcome"], "abstain")
+        self.assertIn("home", r["say"])
+        self.assertEqual(agent().here["label"], "home")
+
+
+    # Typos, 22 Oct: about one request in six in Gab's log. A word one letter away from a word TermNL
+    # knows is read as that word, and said so; names are never corrected; a change still asks.
+    def test_a_typo_in_a_reading_request_is_read_and_said(self):
+        r = agent().hear("chek the memory")
+        self.assertEqual((r["outcome"], r["skill"]), ("act", "check-memory"))
+        self.assertEqual(r["corrections"], [["chek", "check"]])
+        self.assertIn("chek", r["note"])
+
+    def test_a_typo_in_a_change_asks_first_and_the_name_stays_as_typed(self):
+        a = agent()
+        r = a.hear("creat a folder called bikse")
+        self.assertEqual(r["outcome"], "ask")
+        self.assertIn("creat", r["say"])
+        self.assertEqual(a.hear("yes")["command"], "mkdir -p $HOME'/bikse'")
+
+    def test_a_typo_in_a_name_or_a_short_word_is_left_alone(self):
+        r = agent().hear("create a folder called recipies")
+        self.assertEqual(r["command"], "mkdir -p $HOME'/recipies'")
+        self.assertNotIn("corrections", r)
+
+    # Rename (Gab, 22 Oct: "perhaps we will need a rename file/folder skill"): never overwrites.
+    def test_renaming_a_file(self):
+        self.assertEqual(agent().hear("rename note.md to memo.md")["command"], "mv -nT $HOME'/note.md' $HOME'/memo.md'")
+        self.assertEqual(agent().hear("rename note.md to memo")["command"], "mv -nT $HOME'/note.md' $HOME'/memo.md'")
+        r = agent().hear("rename note.md to todo.txt")
+        self.assertEqual(r["reason"], "already exists")
+        self.assertIsNone(r.get("command"))
+
+    def test_renaming_a_folder(self):
+        self.assertEqual(agent().hear("rename the ideas folder to thoughts")["command"], "mv -nT $HOME'/ideas' $HOME'/thoughts'")
+        self.assertEqual(agent().hear("rename ideas to projects")["reason"], "already exists")
+        self.assertEqual(agent().hear("rename ideas to Documents")["reason"], "already exists")  # a name can be a word like "documents"
+
+    def test_a_new_folder_never_replaces_one(self):
+        self.assertEqual(agent().hear("create a folder called projects")["reason"], "already exists")
+
+    # Closing an app (Gab's log, 22 Oct: "close expressvpn"): approved first, unsaved work may be lost.
+    def test_closing_a_running_app_is_approved_first(self):
+        a = agent()
+        r = a.hear("close firefox")
+        self.assertEqual((r["outcome"], r["skill"]), ("approve", "close-app"))
+        self.assertEqual(a.hear("yes")["command"], "pkill -x 'firefox'")
+        self.assertEqual(agent().hear("quit the terminal")["skill"], "close-app")
+
+    def test_closing_an_app_that_isnt_running_asks_which(self):
+        a = agent()
+        self.assertEqual(a.hear("close chrome")["skill"], "close-app")  # "I don't know “chrome” yet…"
+        r = a.hear("yes")
+        self.assertEqual(r["outcome"], "ask")
+        self.assertEqual(sorted(r["chips"]), ["Firefox", "Terminal"])
+
+
+    # Gab's run, 22 Oct 13:50–13:54: two folders made with the wrong name, and two requests missed.
+    def test_a_request_said_again_with_a_typo_while_a_name_is_asked(self):
+        a = agent()
+        a.hear("make a new folder")
+        r = a.hear("crate a folder named Pictures")
+        self.assertEqual(r.get("command"), "mkdir -p $HOME'/Pictures'")
+
+    def test_call_and_name_before_a_name(self):
+        self.assertEqual(agent().hear("create a folder call Pictures")["command"], "mkdir -p $HOME'/Pictures'")
+        self.assertEqual(agent().hear("make a file name groceries")["command"], "touch $HOME'/groceries.md'")
+
+    def test_the_name_before_the_word_folder(self):
+        for said in ["create a Pictures folder", "add a Videos folder", "make a new Pictures folder in documents"]:
+            r = agent().hear(said)
+            self.assertEqual(r["outcome"], "act", said)
+            self.assertIn("Pictures" if "Pictures" in said else "Videos", r["command"])
+        self.assertEqual(agent().hear("create a new folder")["outcome"], "ask")  # "new" is not a name
+
+    def test_ls_lists_where_you_are(self):
+        a = agent()
+        a.hear("go to documents")
+        r = a.hear("ls")
+        self.assertEqual((r["skill"], r["args"]["place"]), ("show-folder", "$HOME/Documents"))
+
+    # Two wrong actions in Gab's first evening with TermNL in the desk (23 Oct)
+    def test_a_typo_never_hides_a_place_inside_a_name(self):
+        a = agent()
+        r = a.hear("add a new file call gab.md insde Documents")  # made "gab.md insde Documents.md" in home
+        self.assertEqual(r["outcome"], "ask")  # a typo read is said, and asked
+        self.assertEqual(r["corrections"], [["insde", "inside"]])
+        self.assertEqual(a.hear("yes")["command"], "touch $HOME'/Documents/gab.md'")
+
+    def test_names_are_still_never_corrected(self):
+        self.assertEqual(agent().hear("create a file called chek list")["command"], "touch $HOME'/chek list.md'")
+        self.assertEqual(agent().hear("create a folder called holiday photos")["command"], "mkdir -p $HOME'/holiday photos'")
+
+    def test_a_name_ending_in_a_file_type_is_a_file_never_a_folder(self):
+        r = agent().hear("create a note.md in the Documents folder")  # was a folder called note.md
+        self.assertEqual(r["skill"], "create-file")
+        self.assertNotIn("mkdir", r.get("command", ""))
+
+    # Music (Gab, 23 Oct): "play daft punk or play a thousand leaves", "play music start a random playlist",
+    # then stop, pause, mute, next and previous. Ordinary commands; the desk's player does them.
+    def test_music_is_played_by_name_or_at_random(self):
+        for said in ["play some music", "could you play some music?", "play music"]:
+            self.assertEqual(agent().hear(said)["command"], "mpc play", said)
+        self.assertEqual(agent().hear("play wax tailor")["command"], "mpc searchplay any 'Wax Tailor'")
+        self.assertEqual(agent().hear("play hope and sorrow")["command"], "mpc searchplay any 'Hope & Sorrow'")
+        self.assertEqual(agent().hear("play something by wax tailor")["command"], "mpc searchplay any 'Wax Tailor'")
+
+    def test_the_player_is_steered_in_plain_words(self):
+        for said, command in [("pause", "mpc pause"), ("pause the music", "mpc pause"), ("stop the music", "mpc stop"),
+                              ("next", "mpc next"), ("next song", "mpc next"), ("skip", "mpc next"), ("previous song", "mpc prev"),
+                              ("mute", "pactl set-sink-mute @DEFAULT_SINK@ 1"), ("unmute the sound", "pactl set-sink-mute @DEFAULT_SINK@ 0")]:
+            self.assertEqual(agent().hear(said).get("command"), command, said)
+
+    def test_stop_alone_is_still_a_no(self):
+        self.assertNotEqual(agent().hear("stop").get("skill"), "stop-music")
+
+    # ---- 24 Oct 2026, feat/improvements: act with confidence, ask to tell apart, or abstain
+
+    def test_turn_on_is_told_apart_by_its_object(self):
+        """Gab, 24 Oct: "turn on the wifi, turn on the music, turn on bluetooth should be clearly
+        disambiguated. TermNL should be able to act with confidence or ask for disambiguation or abstain." """
+        a = {"admin mode": "on"}
+        for said, skill, outcome in [("turn on the wifi", "turn-on-wifi", "approve"), ("turn on the music", "play-music", "act"),
+                                     ("turn on bluetooth", "turn-on-bluetooth", "approve"), ("turn the music on", "play-music", "act"),
+                                     ("turn the music off", "stop-music", "act"), ("turn off the sound", "mute-sound", "act"),
+                                     ("start bluetooth", "turn-on-bluetooth", "approve"), ("stop the wifi", "turn-off-wifi", "approve"),
+                                     ("stop bluetooth", "turn-off-bluetooth", "approve")]:
+            r = agent(a).hear(said)
+            self.assertEqual((r.get("skill"), r["outcome"]), (skill, outcome), said)
+
+    def test_an_action_without_its_object_asks_which_one(self):
+        for said in ("turn on", "turn it on", "turn off", "switch it off"):
+            r = agent().hear(said)
+            self.assertEqual(r["outcome"], "ask", said)
+            self.assertIsNone(r.get("skill"), said)
+            self.assertGreaterEqual(len(r["chips"]), 2, said)
+        a = agent({"admin mode": "on"})
+        self.assertIn("turn Wi-Fi on", a.hear("turn on")["chips"])
+        self.assertEqual(a.hear("turn Wi-Fi on")["skill"], "turn-on-wifi")
+
+    def test_a_template_the_model_doubts_asks_which_of_two(self):
+        """24 Oct: both silent wrong actions found by the probes came from templates, never from the model. Since
+        26 Oct the sentence says which: "the folder photos" is a folder, and the device has none of that name, so
+        it is said (Gab: "it should indeed say I don't see a folder called photos"); "is bluetooth running" is the
+        board's Bluetooth (Gab, 22 Oct)."""
+        r = agent().hear("rename the folder photos to pictures")
+        self.assertEqual((r["outcome"], r["skill"]), ("ask", "rename-folder"))
+        self.assertEqual(r["say"], "I don't see a folder called “photos”. Which one?")
+        self.assertIn("Documents", r["chips"])
+        r = agent().hear("is bluetooth running")
+        self.assertEqual((r["outcome"], r["skill"]), ("act", "check-bluetooth"))
+
+
+    def test_the_board_is_never_offered_the_opposite_of_what_was_said(self):
+        """Gab, 24 Oct, for the scale test: "reboot, turn off the board, restart the board"."""
+        a = {"admin mode": "on"}
+        for said, skill in [("reboot", "restart-system"), ("restart the board", "restart-system"),
+                            ("turn off the board", "shut-down-system"), ("turn the pi off", "shut-down-system")]:
+            r = agent(a).hear(said)
+            self.assertEqual((r.get("skill"), r["outcome"]), (skill, "approve"), said)
+        for said in ("turn the board on", "turn on the pi"):
+            r = agent(a).hear(said)
+            self.assertEqual((r["outcome"], r.get("skill")), ("abstain", None), said)
+        self.assertIn("shut the board down", agent(a).hear("turn off")["chips"])
+
+
+    def test_the_person_sets_their_name_and_their_agency_in_words(self):
+        """Gab, 24 Oct: "a specific command to edit their settings or preferences (admin mode, adding their
+        name, etc)"; "The TermNL chat system was imagined to be personal, so saying Hey Gab, no problems your
+        CPU is at 58 degrees"."""
+        settings = {"admin mode": "off", "show commands": "off"}
+        a = agent(settings)
+        r = a.hear("call me Gab")
+        self.assertEqual((r["outcome"], r["changes"]), ("act", {"name": "Gab"}))
+        self.assertEqual(a.hear("show me the commands")["changes"], {"show commands": "on"})
+        self.assertEqual(a.hear("hide the commands")["changes"], {"show commands": "off"})
+        self.assertEqual(settings, {"admin mode": "off", "show commands": "off", "name": "Gab"})
+
+    def test_admin_mode_is_never_changed_by_a_sentence_only_in_the_settings_panel(self):
+        """Gab, 24 Oct: "turn on or off admin mode should be kept out of the text skills perhaps as a safety
+        measure. but the setting skill should open a small panel with some toggles" """
+        settings = {"admin mode": "off"}
+        for said in ("turn on admin mode", "enable admin mode", "i want admin rights", "turn on sudo"):
+            r = agent(settings).hear(said)
+            self.assertNotIn("changes", r, said)
+            self.assertNotEqual(r["outcome"], "approve", said)
+        self.assertEqual(settings, {"admin mode": "off"})
+        r = agent().hear("open my settings")
+        self.assertEqual((r["outcome"], r["opens"]), ("act", "settings"))
+        from termnl.skills import load
+        from termnl.load import language_dir, read
+        import os
+        d = language_dir("en")
+        files = {k: read(os.path.join(d, "words", k + ".md")) for k in ("actions", "objects", "filetypes", "conversation", "samples", "readings", "values")}
+        bad = "---\ndoes: turn on admin\nlabel: sneaky\nchanges: admin mode to on\n---\n\n## People say\n\n- please turn on admin\n\n## Replies\n\n- done: Done.\n"
+        self.assertTrue(any("settings panel" in e for e in load(files, {"sneaky": bad})["errors"]))
+
+    def test_help_says_what_termnl_can_do_by_topic(self):
+        """Gab, 24 Oct: "there is no help skill, one that list what TermNL could do for users" """
+        for said in ("help", "what can you do", "what can i ask you"):
+            r = agent().hear(said)
+            self.assertEqual((r["outcome"], r.get("skill")), ("act", "show-help"), said)
+        a = agent()
+        r = a.hear("help")
+        rows = dict(r["table"]["rows"])
+        self.assertEqual(r["chips"], list(rows))  # a chip per topic
+        self.assertIn("more", rows["Files and folders"])  # dense: two examples and a count (Gab: "a denser version")
+        whole = a.hear("Network")
+        self.assertIn(["turn Wi-Fi on"], whole["table"]["rows"])
+        self.assertNotIn("Network", whole["chips"])
+        self.assertIn(["play music"], a.hear("Music and sound")["table"]["rows"])  # another topic, tapped next
+        listed = []
+        for topic in rows:
+            b = agent()
+            b.hear("help")
+            listed += [row[0] for row in b.hear(topic)["table"]["rows"]]
+        self.assertEqual(sorted(listed), sorted(s["label"] for s in lang["skills"] if s["id"] != "show-help"))
+        b = agent()
+        b.hear("help")
+        self.assertEqual(b.hear("make a folder called bikes")["skill"], "create-folder")  # the chips don't hold the next request
+
+    def test_a_reply_says_the_name_only_when_there_is_one(self):
+        from termnl.text import pick
+        lines = ["Hey {user}, all good."]
+        self.assertEqual(pick(lines + ["All good."], lambda: 0, ""), "All good.")
+        self.assertEqual(pick(lines + ["All good."], lambda: 0, "Gab"), "Hey {user}, all good.")
+        self.assertEqual(Agent(**lang, settings={"name": "Gab"}, device=device, random=lambda: 0.99).hear("what can you do")["say"][:7], "Hi Gab,")
+        self.assertNotIn("{user}", agent().hear("what can you do")["say"])
+
+    def test_a_reply_that_always_says_the_name_leaves_it_out_cleanly_when_there_is_none(self):
+        """say-how's "When it's busy" all say {user}: without a name it said "Busy but fine, . 74 °C" (seen 24 Nov)"""
+        from termnl.text import pick
+        self.assertEqual(pick(["Busy but fine, {user}. 74 °C"], lambda: 0, ""), "Busy but fine. 74 °C")
+        self.assertEqual(pick(["Fine, thanks {user}!"], lambda: 0, ""), "Fine, thanks!")
+        self.assertEqual(pick(["{user}, you have 3 files"], lambda: 0, ""), "You have 3 files")
+
+    def test_a_program_that_isnt_a_running_app_is_said_so_with_the_apps_running(self):
+        """Gab, 24 Oct, on the board: "kill pipewire", yes → "Which one should I stop?", the name lost. Only apps
+        are stopped, and TermNL says why (his choice: "apps only, say why")."""
+        for said in ("kill pipewire", "stop pipewire", "force quit pipewire"):
+            a = agent()
+            r = a.hear(said)
+            self.assertEqual((r["outcome"], r["skill"]), ("ask", "stop-process"), said)
+            self.assertEqual(r["say"], "“pipewire” isn't an app I can stop. Running now:", said)
+            self.assertEqual(r["chips"], ["Firefox", "Terminal"], said)
+            self.assertEqual(a.hear("Terminal")["outcome"], "approve", said)
+            self.assertEqual(a.hear("yes")["command"], "pkill -9 -x 'gnome-terminal-'", said)
+
+    def test_a_name_given_in_small_letters_gets_its_capital_and_is_read_back(self):
+        """Gab, 24 Oct: "what is my name" offered to set it, and "gab" stayed in small letters"""
+        settings = {"admin mode": "off"}
+        a = agent(settings)
+        self.assertEqual(a.hear("what is my name")["skill"], "say-name")
+        self.assertEqual(a.hear("call me gab")["changes"], {"name": "Gab"})
+        self.assertEqual(a.hear("my name is McKenzie")["changes"], {"name": "McKenzie"})
+        self.assertEqual(settings["name"], "McKenzie")
+
+    def test_list_alone_shows_the_folder(self):
+        """Gab, 24 Oct: "list" alone shows the folder, as before the help and process skills shared the word"""
+        for said in ("list", "list all"):
+            r = agent().hear(said)
+            self.assertEqual((r["outcome"], r["skill"]), ("act", "show-folder"), said)
+
+    def test_learning_again_is_asked_for_in_words_and_approved_first(self):
+        """Gab, 24 Oct: "give a specific command to user within TermNL to retrain their model"; then "let us
+        build this one and then i will test on the eve device later on" """
+        for said in ("learn what i taught you", "retrain your model", "train the model again"):
+            a = agent()
+            self.assertEqual(a.hear(said)["outcome"], "approve", said)
+            r = a.hear("yes")
+            self.assertEqual((r["outcome"], r.get("trains")), ("act", True), said)
+
+    def test_the_server_learns_in_the_background_and_says_when_it_is_done(self):
+        import shutil
+        import tempfile
+        import time
+        from termnl.server import TermNL
+        root = tempfile.mkdtemp()
+        try:
+            shutil.copy(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "settings.md"), root)
+            app = TermNL(root=root, home=os.path.join(root, "home"))
+            app.log = lambda *a, **k: None
+            app.trainer = ["sleep", "1"]  # a stand-in that takes a moment
+            app.say("learn what i taught you", "t")
+            self.assertIn("learning now", app.say("yes", "t")["say"])
+            app.say("retrain your model", "t")
+            self.assertIn("still learning", app.say("yes", "t")["say"])  # one training at a time
+            self.assertRegex(app.say("are you learning", "other")["say"], r"^I'm still learning: \d+ seconds? so far")
+            app.training["process"].wait()
+            self.assertNotIn("learn", app.say("what time is it", "other")["say"])  # not the one that asked
+            self.assertEqual(app.learning("other"), {"learning": False, "say": None})
+            self.assertRegex(app.learning("t")["say"], r"learn.* 1 second\b")  # the page that asked fetches it
+            self.assertNotIn("learn", app.say("what time is it", "t")["say"])  # told once
+            self.assertIsNone(app.training)
+            self.assertRegex(app.say("are you learning", "t")["say"], r"^I'm not learning right now\.")
+            self.assertIn("haven't told me your name", app.say("what is my name", "t")["say"])
+            app.say("call me gab", "t")
+            self.assertRegex(app.say("what is my name", "t")["say"], r"^(You're|Your name is) Gab\.$")
+            app.say("learn what i taught you", "t")
+            self.assertTrue(app.say("yes", "t")["learning"])  # the page starts asking
+            app.training["process"].wait()
+            self.assertRegex(app.say("what time is it", "t")["say"], r"learn.* 1 second\b")  # or its next reply says it
+            app.trainer = ["sh", "-c", "echo no numpy here >&2; exit 1"]
+            app.say("learn what i taught you", "t")
+            app.say("yes", "t")
+            app.training["process"].wait()
+            self.assertIn("kept what I knew before: no numpy here", app.say("what time is it", "t")["say"])
+        finally:
+            shutil.rmtree(root)
+
+
+class GabsBoardSession(unittest.TestCase):
+    """Gab's session on the board, 26 Oct 2026 (feat/frames, the chat page): moving, deleting and restoring
+    went well, then three tries at making a file in Documents all failed ("the file creation is truly having
+    a problem"). The same on main."""
+
+    def first_turns(self, a):
+        """what came before, as typed; it went well, and left "Which file?" waiting before the time was asked"""
+        for said in ("move note.md to document", "Documents", "and delete it", "yes", "yes", "restore it", "delete it"):
+            a.hear(said)
+        self.assertEqual(a.hear("what time is it")["skill"], "check-time")
+
+    def test_a_file_type_never_runs_past_inside(self):
+        """"noe" for "note": "document" is a word for file, and the type took "noe inside" ("I don't see “noe
+        inside”. Which one?"); a value stops before "in", "inside", "into", as a name does"""
+        r = agent().hear("create a new noe inside document")
+        self.assertNotIn("noe inside", r["say"])
+        self.assertNotEqual(r["outcome"], "act")
+
+    def test_a_request_said_while_a_question_waits_is_read_as_said_alone(self):
+        """"Which one?" took the whole of "create note_02 inside document" as the file type, and the request
+        that followed lost its name and folder ("What should I call it?"): a request said while a question
+        waits gets the reply it gets alone"""
+        for request in ("create note_02 inside document", "create note_02.md inside document", "create note_02.md in documents"):
+            alone = agent().hear(request)
+            a = agent()
+            a.hear("create a new noe inside document")
+            after = a.hear(request)
+            self.assertEqual((after["outcome"], after.get("skill"), after["say"], after.get("command")),
+                             (alone["outcome"], alone.get("skill"), alone["say"], alone.get("command")), request)
+
+    def test_the_session_as_typed(self):
+        a = agent()
+        self.first_turns(a)
+        a.hear("create a new noe inside document")
+        r = a.hear("create note_02 inside document")
+        self.assertNotIn("create note_02", r["say"])  # not taken as the answer to the question waiting
+        r = a.hear("create note_02.md inside document")
+        self.assertEqual(r["skill"], "create-file")
+        self.assertNotIn(r["say"], ("What should I call it?", "What name should the file have?"))  # the name was said
+        if r["outcome"] == "ask":  # "Documents, right?"
+            r = a.hear("yes")
+        self.assertEqual(r["command"], "touch $HOME'/Documents/note_02.md'")
+
+
+class OwnWords(unittest.TestCase):
+    """Gab, 26 Oct, on "do i have bluetooth" offered "look for a kind of file or check Bluetooth?": "is there
+    bluetooth on the board, then show … if you go ask a seller do you have carrots, … most of the time it will
+    be yes they are here". A skill that reads a sentence only by taking a word it doesn't know as its value
+    gives way to the skill the sentence names."""
+
+    def test_do_i_have_x_goes_to_the_skill_of_x(self):
+        for said, skill in (("do i have bluetooth", "check-bluetooth"), ("do i have enough memory free", "check-memory"),
+                            ("is there room for more files", "check-storage"), ("are there any updates", "update-system"),
+                            ("do I have notes about the board", "find-text")):
+            r = agent({"admin mode": "on"}).hear(said)
+            self.assertEqual(r.get("skill"), skill, said)
+
+    def test_a_kind_of_file_it_knows_is_still_looked_for(self):
+        r = agent().hear("do i have any pdf files")
+        self.assertEqual((r["outcome"], r.get("skill")), ("act", "check-type"))
+
+
+class WholeHome(unittest.TestCase):
+    """Gab, 26 Oct: "ziping the home should require admin and ask for approval", for "Any skill on whole home";
+    the archive of home goes "In Downloads"."""
+
+    def test_acting_on_the_home_folder_itself_needs_admin_and_approval(self):
+        for said in ("compress my home folder", "delete the home folder", "rename the home folder to old"):
+            self.assertEqual(agent().hear(said)["reason"], "admin mode off", said)
+            r = agent({"admin mode": "on"}).hear(said)
+            self.assertEqual(r["outcome"], "approve", said)
+
+    def test_home_as_the_place_something_happens_stays_free(self):
+        self.assertEqual(agent().hear("create a folder called bikes in home")["command"], "mkdir -p $HOME'/bikes'")
+        self.assertEqual(agent().hear("compress the ideas folder")["outcome"], "act")
+
+    def test_the_archive_of_home_goes_to_downloads_and_leaves_itself_out(self):
+        import tempfile
+        from termnl.runner import run
+        a = agent({"admin mode": "on"})
+        a.hear("compress my home folder")
+        command = a.hear("yes")["command"]
+        home = tempfile.mkdtemp()
+        try:
+            os.makedirs(os.path.join(home, "Downloads"))
+            open(os.path.join(home, "note.md"), "w").write("hello")
+            done = run(command, home)
+            self.assertEqual(done["code"], 0, done["err"])
+            self.assertEqual(done["out"].strip(), "~/Downloads/home.tar.gz")
+            import tarfile
+            names = tarfile.open(os.path.join(home, "Downloads", "home.tar.gz")).getnames()
+            self.assertTrue(any(n.endswith("note.md") for n in names), names)
+            self.assertFalse(any(n.endswith("home.tar.gz") for n in names), names)
+        finally:
+            import shutil
+            shutil.rmtree(home)
+
+
+class FolderNames(unittest.TestCase):
+    """Gab, 26 Oct: "for renaming the folder or moving something to a folder, if the name does not exist then it
+    needs to say, if the name is close hence doc for documents then it should propose"."""
+
+    def test_a_folder_said_by_its_beginning_is_proposed(self):
+        a = agent()
+        r = a.hear("move note.md to doc")
+        self.assertEqual((r["say"], r["chips"]), ("Did you mean Documents?", ["Documents", "no"]))
+        self.assertEqual(a.hear("yes")["command"], "mv $HOME'/note.md' $HOME'/Documents/'")
+        a = agent()
+        a.hear("move note.md")
+        self.assertEqual(a.hear("doc")["say"], "Did you mean Documents?")
+
+    def test_a_folder_the_device_does_not_have_is_said(self):
+        r = agent().hear("create dir named seed.md inside the photos")
+        self.assertEqual((r["outcome"], r["skill"], r["say"]), ("ask", "create-folder", "I don't see a folder called “photos”. Which one?"))
+
+
+class SaidWrong(unittest.TestCase):
+    """Three sentences that did something else than said, found by the 20,817 readings (26 Oct)."""
+
+    def test_an_archive_of_a_folder_compresses_it(self):
+        r = agent().hear("can you make an archive of my projects folder")
+        self.assertEqual((r["outcome"], r["skill"]), ("act", "compress-folder"))
+        self.assertEqual(agent().hear("new folder archive")["command"], "mkdir -p $HOME'/archive'")
+
+    def test_a_web_address_is_one(self):
+        r = agent().hear("fetch report.pdf from the laptop")
+        self.assertEqual(r["skill"], "get-file")
+        for said, link in (("download https://example.com/map.pdf", "https://example.com/map.pdf"),
+                           ("grab the file at example.org/guide.txt", "example.org/guide.txt")):
+            r = agent().hear(said)
+            self.assertEqual(r["command"], "wget -P $HOME'/Downloads' '%s'" % link, said)
+
+    def test_a_file_answered_as_people_say_it_loses_the_and_file(self):
+        '''Gab, 30 Oct: "Which file?", "the proton file" was looked for as "the proton file"'''
+        a = agent()
+        a.hear("open a file")
+        self.assertEqual(a.hear("the groceries file")["say"], "groceries.md isn't in home, but there's one in Documents. That one?")
+        self.assertEqual(a.hear("yes")["command"], "xdg-open $HOME'/Documents/groceries.md'")
+
+    def test_a_new_name_keeps_its_the(self):
+        a = agent()
+        a.hear("make a new folder")
+        self.assertEqual(a.hear("the bike photos")["command"], "mkdir -p $HOME'/the bike photos'")
+
+    def test_a_folder_said_while_a_file_is_asked_for_is_where_it_is(self):
+        """Gab, 30 Oct: "inside ocuments" while "Which file?" waited"""
+        a = agent()
+        a.hear("open a file")
+        r = a.hear("inside ocuments")
+        self.assertEqual((r["outcome"], r["chips"]), ("ask", ["note.md", "report.pdf", "groceries.md"]))
+        self.assertEqual(a.hear("report.pdf")["command"], "xdg-open $HOME'/Documents/report.pdf'")
+
+    def test_a_request_said_while_a_list_waits_is_read_as_said(self):
+        '''Gab, 30 Oct: "list all memo", then "Memos" was answered "I don't see Memos. Which one?"'''
+        a = agent()
+        a.hear("list all memo")
+        r = a.hear("Documents")
+        self.assertNotEqual(r.get("skill"), "show-type")
+
+
+if __name__ == "__main__":
+    unittest.main()

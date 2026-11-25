@@ -1,0 +1,40 @@
+/* theme.css — colour, the Symbios way: a theme is three knobs (--bg paper, --fg ink, --accent), and
+   every other colour is derived from them, so a new theme is one line. From symbios (desk/app/css/theme.css).
+   Switch with <html data-theme="phosphor">; theme.js remembers it. */
+
+:root {
+  /* ---- the only knobs a theme sets ---- */
+  --bg: #ffffff;
+  --fg: #161616;
+  --accent: #161616;   /* mono by default: accent = ink (1-bit look) */
+}
+
+/* ---- derived: never set per theme; worked out again wherever a theme is set (a swatch, design.html) ---- */
+:root, [data-theme] {
+  --muted: color-mix(in srgb, var(--fg) 52%, var(--bg));         /* secondary text */
+  --hair: color-mix(in srgb, var(--fg) 12%, var(--bg));          /* faint fills: hover, cards */
+  --panel: var(--bg);                                            /* windows and panels: opaque, no glass */
+  --border: color-mix(in srgb, var(--fg) 24%, var(--bg));        /* every hairline */
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
+  --on-accent: var(--bg);                                        /* what is written on the accent */
+  --scrim: color-mix(in srgb, var(--bg) 90%, transparent);      /* behind the launcher and the overview */
+  --shadow: 0 6px 20px -10px color-mix(in srgb, var(--fg) 45%, transparent);
+  --dither: radial-gradient(var(--fg) 0.5px, transparent 0.7px); /* the desktop's texture */
+}
+
+:root {
+  /* ---- fixed meanings, the same in every theme ---- */
+  --danger: #e5484d;   /* a hot board, closing a window */
+  --on-danger: #ffffff;
+  --veil: #000000;     /* the brightness veil */
+  --media-bg: #000000; /* behind a film */
+  --page-bg: #ffffff;  /* behind a PDF's page */
+}
+
+/* ---- themes: each is three colours ---- */
+[data-theme="ink"]      { --bg: #0d0d0d; --fg: #e8e8e8; --accent: #e8e8e8; }
+[data-theme="phosphor"] { --bg: #001a0d; --fg: #3bff88; --accent: #3bff88; }
+[data-theme="amber"]    { --bg: #0c0900; --fg: #ffb000; --accent: #ffb000; }
+[data-theme="blue"]     { --bg: #f6f8fc; --fg: #0c2340; --accent: #2f6fb0; }
+[data-theme="slate"]    { --bg: #14181d; --fg: #cfd6dd; --accent: #6aa6ff; }
+[data-theme="light"]    { --bg: #ffffff; --fg: #161616; --accent: #161616; }  /* named, for a swatch to wear it */

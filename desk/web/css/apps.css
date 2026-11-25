@@ -1,0 +1,160 @@
+/* apps.css — what each app adds to the components: only its own layout. Values only from tokens.css
+   and theme.css. */
+
+/* ---- Files ---- */
+.fbar { display: flex; align-items: center; gap: var(--sp-1); padding: var(--sp-2) var(--sp-2); border-bottom: var(--line) solid var(--border); }
+.crumbs { flex: 1; min-width: 0; display: flex; align-items: center; overflow-x: auto; scrollbar-width: none; }
+.crumbs button { padding: var(--sp-1) 2px; border: 0; background: none; white-space: nowrap; }
+.crumbs button + button::before { content: "/"; margin-right: var(--sp-1); color: var(--muted); }
+.crumbs button:last-child { font-weight: var(--weight-strong); }
+.crumbs button:hover { text-decoration: underline; }
+.fitems { flex: 1; min-height: 0; overflow: auto; padding: var(--sp-1); outline: none; }
+.fitems.over { outline: 2px dashed var(--fg); outline-offset: -6px; }
+.fitems .empty { grid-column: 1 / -1; margin-top: var(--sp-6); color: var(--muted); text-align: center; }
+.fitem { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: var(--sp-3); padding: var(--sp-1) var(--sp-2); border-radius: var(--r-1); cursor: default; }
+.fitem .ficon { display: grid; place-items: center; color: var(--muted); }
+.fitem .ficon svg { width: var(--icon); height: var(--icon); }
+.fitem .fname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fitem .fline { color: var(--muted); font-size: var(--fs-xs); white-space: nowrap; }
+.fitem:hover { background: var(--hair); }
+.fitem.sel { background: var(--fg); color: var(--bg); }
+.fitem.sel .ficon, .fitem.sel .fline { color: var(--bg); }
+.fitem.over { outline: 2px solid var(--fg); }
+.fitem input { width: 100%; padding: 2px var(--sp-1); border: var(--line) solid var(--fg); border-radius: var(--r-1); background: var(--bg); color: var(--fg); outline: none; }
+.fitems.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); align-content: start; gap: var(--sp-1); }
+.fitems.grid .fitem { grid-template-columns: 1fr; justify-items: center; gap: var(--sp-1); padding: var(--sp-2) var(--sp-1); text-align: center; }
+.fitems.grid .fitem .ficon { width: 72px; height: 72px; overflow: hidden; border-radius: var(--r-2); }
+.fitems.grid .fitem .ficon svg { width: var(--icon-lg); height: var(--icon-lg); }
+.fitems.grid .fitem .ficon img { width: 100%; height: 100%; object-fit: cover; }
+.fitems.grid .fitem .fname { max-width: 100%; }
+.fitems.grid .fitem .fline { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+@media (pointer: coarse) { .fitem { padding: var(--sp-3) var(--sp-2); } }
+
+/* ---- the Player ---- */
+app-player { align-items: center; gap: var(--sp-3); padding: var(--sp-4); }
+.pl-art { width: 160px; height: 160px; flex: 0 0 auto; display: grid; place-items: center; overflow: hidden; border: var(--line) solid var(--border); border-radius: var(--r-2); color: var(--muted); }
+.pl-art svg { width: var(--icon-xl); height: var(--icon-xl); }
+.pl-art img { width: 100%; height: 100%; object-fit: cover; }
+.pl-now { max-width: 100%; text-align: center; }
+.pl-now b, .pl-now small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-now small { margin-top: 2px; color: var(--muted); font-size: var(--fs-xs); }
+.pl-seek { width: 100%; display: flex; align-items: center; gap: var(--sp-2); color: var(--muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+.pl-ctrl { display: flex; align-items: center; gap: var(--sp-3); }
+.pl-queue { align-self: stretch; flex: 1; min-height: 0; overflow: auto; margin: var(--sp-1) 0 0; padding: var(--sp-1) 0 0; list-style: none; counter-reset: q; border-top: var(--line) solid var(--border); }
+.pl-queue li { counter-increment: q; cursor: pointer; }
+.pl-queue li::before { content: counter(q); width: 2ch; color: var(--muted); font-size: var(--fs-xs); text-align: right; }
+.pl-queue li.here::before { content: "▸"; color: var(--accent); }
+.pl-queue.walking li::before { content: none; }  /* the music to choose from: no numbers, a glyph instead */
+.pl-queue .g svg { width: var(--icon-sm); height: var(--icon-sm); }
+
+/* ---- the viewers ---- */
+app-picture { outline: none; }
+.pic { flex: 1; min-height: 0; position: relative; background: var(--hair); }
+.pic img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.vbar { display: flex; align-items: center; justify-content: center; gap: var(--sp-3); padding: var(--sp-2); border-top: var(--line) solid var(--border); color: var(--muted); font-size: var(--fs-xs); }
+app-video video { flex: 1; min-height: 0; width: 100%; background: var(--media-bg); }
+app-document iframe { flex: 1; width: 100%; border: 0; background: var(--page-bg); }
+.read-page { flex: 1; min-height: 0; overflow: auto; padding: var(--sp-4) var(--sp-5); font-family: var(--font-read); font-size: var(--fs-md); line-height: var(--lh-read); }
+.read-page .md { max-width: 68ch; margin: 0 auto; }
+.read-page .md h1 { font-size: var(--fs-lg); line-height: var(--lh-tight); }
+.read-page .md h2, .read-page .md h3 { font-size: var(--fs-md); }
+.read-page .md img { max-width: 100%; }
+.read-page .md pre, .read-page .md code { background: var(--hair); font-family: var(--font-ui); font-size: var(--fs-sm); }
+.read-page .md pre { padding: var(--sp-3); overflow-x: auto; border-radius: var(--r-1); }
+.read-page .md blockquote { margin: 0 0 var(--sp-3); padding-left: var(--sp-3); border-left: 2px solid var(--fg); }
+.read-page .md table { border-collapse: collapse; }
+.read-page .md td, .read-page .md th { padding: 3px var(--sp-2); border: var(--line) solid var(--border); }
+.read-page .md a { color: var(--accent); }
+.read-page .front { margin: 0 0 var(--sp-4); padding: var(--sp-2) var(--sp-3); border: var(--line) solid var(--border); border-radius: var(--r-1); color: var(--muted); font-family: var(--font-ui); font-size: var(--fs-xs); white-space: pre-wrap; }
+.read-page .plain { margin: 0; font: inherit; white-space: pre-wrap; overflow-wrap: anywhere; }
+.read-page .empty, app-video .empty { color: var(--muted); }
+.info { display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); padding: var(--sp-5); text-align: center; }
+.info .glyph svg { width: 40px; height: 40px; }
+.info b { overflow-wrap: anywhere; }
+.info small, .info p { color: var(--muted); }
+.info a { color: var(--accent); }
+
+/* ---- Monitor ---- */
+.mon { overflow: auto; }
+.mon-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); padding: var(--sp-4); }
+.gauge { display: flex; flex-direction: column; gap: var(--sp-1); }
+.gauge .big { font-size: var(--fs-lg); line-height: var(--lh-tight); font-variant-numeric: tabular-nums; }
+.gauge .bar { margin-top: var(--sp-1); }
+.gauge small { color: var(--muted); font-size: var(--fs-xs); }
+.spark { height: 34px; display: flex; align-items: flex-end; gap: 2px; margin-top: var(--sp-1); }
+.spark i { flex: 1; height: 100%; border-radius: 2px; background: var(--accent); opacity: .8; transform-origin: bottom; transform: scaleY(.06); transition: transform .2s; }
+.mon-act { padding: 0 var(--sp-4) var(--sp-3); }  /* Activity under the four gauges (19 Oct): the same app, here */
+.mon-act .eyebrow { margin-bottom: var(--sp-1); }
+.mon-act .app-scroll { padding: 0; overflow: visible; }
+.mon-model { padding: 0 var(--sp-4) var(--sp-4); color: var(--muted); font-size: var(--fs-xs); }
+
+/* ---- Settings ---- */
+.set-sec { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-4); border-bottom: var(--line) solid var(--border); }
+.set-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.set-row b { font-weight: var(--weight-strong); }
+.set-row small { display: block; color: var(--muted); font-size: var(--fs-xs); }
+.set-note { color: var(--muted); font-size: var(--fs-xs); }
+.mesh-val { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.seg { display: inline-flex; border: var(--line) solid var(--border); border-radius: var(--r-1); overflow: hidden; }
+.seg button { padding: var(--sp-1) var(--sp-3); border: 0; background: none; font-size: var(--fs-sm); white-space: nowrap; }
+.seg button + button { border-left: var(--line) solid var(--border); }
+.seg button.on { background: var(--accent); color: var(--on-accent); }
+.theme-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-2); }
+.theme-sw { height: 44px; display: grid; place-items: center; border: var(--line) solid var(--accent); border-radius: var(--r-2); background: var(--bg); color: var(--fg); font-size: var(--fs-sm); text-transform: capitalize; }
+.theme-sw.active { outline: 2px solid var(--fg); outline-offset: 2px; }
+
+/* Files' sidebar (the design system's .app-side): Home and the home's own folders, each taking drops; it folds away
+   in a narrow window */
+.fside .row.over { outline: 2px solid var(--fg); }
+.fbody .fitems { flex: 1; min-width: 0; }
+@container files (max-width: 480px) { .fside { display: none; } }
+app-files { container: files / inline-size; }
+.fitem .ficon img { width: 20px; height: 20px; object-fit: cover; border-radius: 2px; display: block; }
+
+/* ---- TermNL and the Terminal (TermNL's windows) ---- */
+.tn-talk { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3); }
+.tn-hello { margin: auto 0 0; }
+.tn-me { align-self: flex-end; max-width: 85%; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-2); background: var(--fg); color: var(--bg); }
+.tn-it { align-self: flex-start; max-width: 100%; display: flex; flex-direction: column; gap: var(--sp-2); }
+.tn-say { font-size: var(--fs-md); white-space: pre-wrap; }
+.tn-answers { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
+.tn-short { flex: 0 0 auto; display: flex; gap: var(--sp-1); overflow-x: auto; scrollbar-width: none; padding: 0 var(--sp-3) var(--sp-2); }  /* one line, slid sideways, as on the desk */
+.tn-short::-webkit-scrollbar { display: none; }
+.tn-short .chip { flex: 0 0 auto; white-space: nowrap; color: var(--muted); }
+.tn-short .chip:hover { color: var(--fg); }
+.tn-answers .chip, .tn-tabs .chip { background: none; color: var(--fg); }
+.tn-short .chip { background: none; }
+.tn-answers .chip:hover:not(:disabled), .tn-short .chip:hover, .tn-tabs .chip:hover { border-color: var(--fg); }
+.chip:disabled { opacity: .4; cursor: default; }
+.tn-cmd { display: flex; align-items: baseline; gap: var(--sp-2); font-size: var(--fs-xs); color: var(--muted); }
+.tn-cmd code { font-family: var(--font-ui); overflow-wrap: anywhere; }
+.tn-cmd code::before { content: "$ "; }
+.tn-how { flex: 0 0 auto; padding: 0 var(--sp-1); border: var(--line) solid var(--border); border-radius: var(--r-1); }
+.tn-how.bad { border-color: var(--danger); color: var(--danger); }
+.tn-table { border-collapse: collapse; font-size: var(--fs-xs); }
+.tn-table th { padding: 0 var(--sp-3) var(--sp-1) 0; text-align: left; }
+.tn-table td { padding: 2px var(--sp-3) 2px 0; border-top: var(--line) solid var(--border); }
+.tn-table td[data-level="hot"], .tn-table td[data-level="weak"] { color: var(--danger); }
+.tn-mark { display: inline-block; margin-right: var(--sp-1); vertical-align: -2px; }
+.tn-mark svg { width: var(--icon-sm); height: var(--icon-sm); }
+.tn-entry { display: flex; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3) var(--sp-3); border-top: var(--line) solid var(--border); }
+.tn-tabs { display: flex; gap: var(--sp-1); padding: var(--sp-2) var(--sp-3); border-bottom: var(--line) solid var(--border); }
+.tn-shell { flex: 1; min-height: 0; overflow: hidden; padding: var(--sp-2) 0 var(--sp-2) var(--sp-2); }
+.tn-log { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.tn-lines { flex: 1; min-height: 0; overflow: auto; padding: var(--sp-3); display: flex; flex-direction: column; gap: var(--sp-2); }
+.tn-lines > p { margin: 0; }
+.tn-out { margin: var(--sp-1) 0 0; font: var(--fs-xs) / var(--lh) var(--font-ui); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* ---- the Reader written: Edit, Save, Done (viewers.js) ---- */
+.read-bar { flex: 0 0 auto; display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); border-bottom: var(--line) solid var(--border); }
+.read-state { flex: 1; min-width: 0; font-size: var(--fs-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.read-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.md-bar { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; gap: 2px; padding: var(--sp-1) var(--sp-3); border-top: var(--line) solid var(--border); overflow-x: auto; }  /* the Markdown buttons under the text, centred (markdown-bar.js) */
+.md-bar .ib svg { width: var(--icon-sm); height: var(--icon-sm); }
+.md-sep { width: var(--line); align-self: stretch; margin: var(--sp-1) var(--sp-1); background: var(--border); }
+.read-write { flex: 1; min-height: 0; width: 100%; padding: var(--sp-4) var(--sp-5); border: 0; outline: none; resize: none; background: var(--bg); color: var(--fg); font: var(--fs-sm) / var(--lh-read) var(--font-ui); tab-size: 2; -webkit-user-select: text; user-select: text; }
+
+
+/* ---- Slides: the viewers' .pic, black as a film's; over the whole screen, the pointer hidden until it moves ---- */
+app-slides .pic { background: var(--media-bg); }
+app-slides.full:not(.pointing) { cursor: none; }

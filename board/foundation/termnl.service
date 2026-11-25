@@ -1,0 +1,24 @@
+[Unit]
+Description=TermNL, SymbiOS's foundation: the board in plain words (local socket only)
+After=network.target user@__UID__.service
+
+[Service]
+User=__USER__
+# what is the person's own: settings.md, logs/, a model trained on the board, commands.json
+Environment=TERMNL_DATA=__HOME__/.config/termnl
+# the program in /opt is read-only: no bytecode written there (install-termnl.sh compiles it once)
+Environment=PYTHONDONTWRITEBYTECODE=1
+# the user's sound (pactl) for the volume skills
+Environment=XDG_RUNTIME_DIR=/run/user/__UID__
+WorkingDirectory=/opt/symbios/termnl
+# /run/symbios: only __USER__ may open the socket inside
+RuntimeDirectory=symbios
+RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
+# --docs: the person's documents (the desk's Ask service, once the desk is installed) answer what TermNL doesn't know
+ExecStart=/usr/bin/python3 -m termnl.server --socket /run/symbios/termnl.sock --home __HOME__ --docs http://127.0.0.1:8801/ask
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

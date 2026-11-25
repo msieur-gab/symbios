@@ -1,0 +1,199 @@
+#!/usr/bin/env python3
+"""symbios-wifi: the WiFi networks the board knows, for TermNL and the desk. Runs as root
+(TermNL and the desk, the same user, call it through sudo; install-termnl.sh allows exactly this file).
+Two ways of keeping networks, the same commands and answers on every board:
+  - netplan (the Orange Pi's Armbian): a network added here goes in a netplan file of its own,
+    60-symbios-wifi.yaml, written as JSON (which is YAML, and needs no escaping);
+  - wpa_supplicant alone (the Luckfox Lyra's Ubuntu, no netplan): a network added here is kept in
+    wpa_supplicant's own file through wpa_cli, marked id_str "symbios", its password kept as the derived
+    key, never as words (Gab, 23 Nov: "how I can add new Wi-Fi to the board").
+The board then uses whichever known network is in range. Every answer is one line of JSON.
+
+    symbios-wifi status          where the board is now, and the networks it knows
+    symbios-wifi scan            the networks in range, strongest first
+    symbios-wifi add NAME        password on standard input (none for an open network)
+    symbios-wifi forget NAME     only a network added here
+"""
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import time
+
+IFACE = "wlan0"
+OURS = "/etc/netplan/60-symbios-wifi.yaml"
+NETPLAN = shutil.which("netplan") is not None  # else wpa_supplicant alone, through wpa_cli
+MARK = "symbios"  # id_str of the networks added here (wpa_supplicant)
+
+
+def out(*cmd, wait=20):
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=wait).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+
+
+def ours():
+    try:
+        return json.load(open(OURS))["network"]["wifis"][IFACE]["access-points"]
+    except (OSError, ValueError, KeyError):
+        return {}
+
+
+def save(points):
+    if not points:
+        return os.path.exists(OURS) and os.remove(OURS)
+    fd = os.open(OURS, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)  # it holds passwords
+    with os.fdopen(fd, "w") as f:
+        json.dump({"network": {"version": 2, "wifis": {IFACE: {"dhcp4": True, "optional": True, "access-points": points}}}}, f)
+
+
+def status():
+    link = re.search(r"SSID: (.*)", out("iw", "dev", IFACE, "link"))
+    ip = re.search(r"inet ([\d.]+)", out("ip", "-4", "-o", "addr", "show", IFACE))
+    if NETPLAN:
+        # every network netplan knows, whoever wrote it: the names are the keys at the left edge
+        known = [re.sub(r'^"|"$', "", l[:-1]) for l in out("netplan", "get", "network.wifis.%s.access-points" % IFACE).splitlines()
+                 if l and not l[0].isspace() and l.endswith(":")]
+        mine = set(ours())
+    else:
+        nets = w_networks()
+        known, mine = [n["ssid"] for n in nets], {n["ssid"] for n in nets if n["ours"]}
+    return {"ssid": link.group(1).strip() if link else None, "ip": ip.group(1) if ip and link else None,
+            "known": [{"ssid": s, "ours": s in mine} for s in sorted(set(known), key=str.lower)]}
+
+
+def scan():
+    best = {}
+    for block in re.split(r"^BSS ", out("iw", "dev", IFACE, "scan"), flags=re.M)[1:]:
+        name, level = re.search(r"^\tSSID: (.+)$", block, re.M), re.search(r"signal: (-?[\d.]+)", block)
+        if not name or "\\x00" in name.group(1):
+            continue  # a hidden network has no name to show
+        ssid, signal = name.group(1).strip(), float(level.group(1)) if level else -100.0
+        if ssid not in best or signal > best[ssid]["signal"]:
+            best[ssid] = {"ssid": ssid, "signal": signal, "secure": bool(re.search(r"^\t(RSN|WPA):", block, re.M))}
+    return {"networks": sorted(best.values(), key=lambda n: -n["signal"])}
+
+
+def apply():
+    """Hand the known networks to the system and wait until the board is on one of them."""
+    subprocess.run(["netplan", "apply"], capture_output=True, timeout=60)
+    for _ in range(30):
+        now = status()
+        if now["ip"]:
+            return now
+        time.sleep(1)
+    return status()
+
+
+def add(ssid, password):
+    if not 1 <= len(ssid.encode()) <= 32:
+        return {"error": "a network name is 1 to 32 characters long"}
+    if password and not 8 <= len(password) <= 63:
+        return {"error": "a WiFi password is 8 to 63 characters long"}
+    if not NETPLAN:
+        return w_add(ssid, password)
+    before, points = ours(), ours()
+    points[ssid] = {"auth": {"key-management": "psk", "password": password}} if password else {}
+    save(points)
+    if subprocess.run(["netplan", "generate"], capture_output=True).returncode:
+        save(before)
+        return {"error": "the system refused that network"}
+    now = apply()
+    if not now["ip"]:  # nothing in range answers any more: put back what worked before
+        save(before)
+        return {**apply(), "error": "the board could not get on a network with that; what it knew before is back"}
+    return {**now, "joined": now["ssid"] == ssid}
+
+
+def forget(ssid):
+    if not NETPLAN:
+        return w_forget(ssid)
+    points = ours()
+    if ssid not in points:
+        return {"error": "only a network added with symbios-wifi can be forgotten here"}
+    del points[ssid]
+    save(points)
+    return apply()
+
+
+# ---- wpa_supplicant alone (the Lyra): its networks through wpa_cli, kept in its own file (save_config) ----
+
+def cli(*args):
+    return out("wpa_cli", "-i", IFACE, *args).strip()
+
+
+def w_networks():
+    """Every network wpa_supplicant knows: its id, name, and whether it was added here."""
+    nets = []
+    for line in cli("list_networks").splitlines()[1:]:
+        f = line.split("\t")
+        if len(f) >= 2 and f[0].isdigit():
+            nets.append({"id": f[0], "ssid": f[1], "ours": cli("get_network", f[0], "id_str") == '"%s"' % MARK})
+    return nets
+
+
+def w_save():
+    cli("set", "update_config", "1")  # the image's file says 0: without it, nothing added would last a restart
+    return cli("save_config") == "OK"
+
+
+def w_wait():
+    """The board on a network with an address, or 30 s gone."""
+    for _ in range(30):
+        now = status()
+        if now["ip"]:
+            return now
+        time.sleep(1)
+    return status()
+
+
+def w_add(ssid, password):
+    old = next((n for n in w_networks() if n["ssid"] == ssid and n["ours"]), None)
+    id = old["id"] if old else cli("add_network")
+    if not id.isdigit():
+        return {"error": "the system refused that network"}
+    # the name as hex and the password as its key (as wpa_passphrase works it out): no quoting to get wrong
+    sets = [("ssid", ssid.encode().hex()), ("id_str", '"%s"' % MARK), ("scan_ssid", "1")]
+    sets += [("psk", hashlib.pbkdf2_hmac("sha1", password.encode(), ssid.encode(), 4096, 32).hex())] if password \
+        else [("key_mgmt", "NONE")]
+    if not all(cli("set_network", id, k, v) == "OK" for k, v in sets) or cli("enable_network", id) != "OK":
+        if not old:
+            cli("remove_network", id)
+        return {"error": "the system refused that network"}
+    now = w_wait()
+    if not now["ip"]:  # nothing in range answers any more: put back what worked before
+        if not old:
+            cli("remove_network", id)
+        cli("reconfigure")
+        return {**w_wait(), "error": "the board could not get on a network with that; what it knew before is back"}
+    w_save()
+    return {**now, "joined": now["ssid"] == ssid}
+
+
+def w_forget(ssid):
+    mine = [n for n in w_networks() if n["ssid"] == ssid and n["ours"]]
+    if not mine:
+        return {"error": "only a network added with symbios-wifi can be forgotten here"}
+    for n in mine:
+        cli("remove_network", n["id"])
+    w_save()
+    return w_wait()
+
+
+if __name__ == "__main__":
+    if os.geteuid():
+        sys.exit("symbios-wifi runs as root")
+    act, name = (sys.argv[1:2] or ["status"])[0], " ".join(sys.argv[2:])
+    if act == "add":
+        answer = add(name, sys.stdin.read().rstrip("\n"))
+    elif act == "forget":
+        answer = forget(name)
+    elif act == "scan":
+        answer = scan()
+    else:
+        answer = status()
+    print(json.dumps(answer))

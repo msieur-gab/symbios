@@ -1,0 +1,40 @@
+[Unit]
+Description=SymbiOS kiosk: the page full screen on HDMI (cog in cage)
+After=systemd-user-sessions.service getty@tty1.service desk.service
+Wants=desk.service
+# owns the screen on tty1; can't share it with a login prompt
+Conflicts=getty@tty1.service
+# cog crash-loops when it can't get a display: four tries in 90 s, then systemd gives up
+# (on symbios an endless relaunch of WebKit cooked the board)
+StartLimitIntervalSec=90
+StartLimitBurst=4
+
+[Service]
+User=__USER__
+PAMName=login
+TTYPath=/dev/tty1
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+Environment=XDG_RUNTIME_DIR=/run/user/__UID__
+Environment=WLR_DRM_NO_MODIFIERS=1
+# VP8 (WebM) decoded in software: the chip's hardware decoder hands frames WebKit 2.48 refuses (desk, 15 Oct)
+Environment=GST_PLUGIN_FEATURE_RANK=v4l2slvp8dec:NONE
+# don't start the browser unless a screen is plugged in
+ExecStartPre=/bin/sh -c 'cat /sys/class/drm/card*/card*-HDMI*/status 2>/dev/null | grep -qx connected'
+# the login session hands its processes a capability (CAP_WAKE_ALARM, systemd 257 on Debian 13), and
+# WebKit's sandbox (bubblewrap) refuses to start with any: cog died at once. Dropped here, the sandbox stays on
+# the screen at 720p when it offers it: the kiosk paints on the CPU, so fewer pixels run cooler, and
+# the desk reads larger on a projector (a screen without 720p keeps its own mode)
+ExecStart=/usr/bin/setpriv --inh-caps=-all --ambient-caps=-all -- /usr/bin/cage -- /bin/sh -c 'wlr-randr --output HDMI-A-1 --mode 1280x720 || true; exec /usr/bin/cog --platform=wl http://localhost/'
+Restart=on-failure
+# cage doesn't leave on SIGTERM: without this, systemd waited 90 s before killing it, the last
+# picture frozen on the screen all that time
+TimeoutStopSec=3
+RestartSec=15
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+
+[Install]
+WantedBy=multi-user.target

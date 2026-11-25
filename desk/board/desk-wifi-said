@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+"""desk-wifi-said NAME: what `desk-wifi add NAME` answered (one line of JSON on standard input), in words, for
+TermNL's "connect to …" on the board (desk server.py lends it). desk-wifi keeps a network and the board uses
+whichever known network is in range, so a network kept is not always joined: that is said, not called a
+failure (Gab, 2026-10-25: "Save, say it honestly"). Its error goes to standard error, with exit code 1."""
+import json
+import sys
+
+name = " ".join(sys.argv[1:])
+try:
+    answer = json.loads(sys.stdin.read() or "{}")
+except ValueError:
+    sys.exit("desk-wifi gave no answer")
+if answer.get("error"):
+    sys.exit(answer["error"][:1].upper() + answer["error"][1:] + ".")
+if answer.get("joined"):
+    print("Done, the board is on %s." % name)
+elif answer.get("ssid"):
+    print("Saved %s. The board stays on %s and will use %s when %s isn't in range; I can't check the password until then."
+          % (name, answer["ssid"], name, answer["ssid"]))
+else:
+    print("Saved %s. The board isn't on any Wi-Fi right now." % name)

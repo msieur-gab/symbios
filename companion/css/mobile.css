@@ -1,0 +1,383 @@
+/* mobile.css — the companion mobile-OS shell. Reuses the desktop shell's theme
+ * tokens (theme.css: --bg/--fg/--accent + derived --muted/--hair/--panel-border)
+ * and Departure Mono, so the phone reads as the SAME OS. It only swaps desktop
+ * idioms (draggable windows, three-island dock) for mobile ones: a springboard
+ * home, a bottom dock, full-screen panes. No glass/blur, 1px borders, one accent.
+ * "Less is more" — same restraint as base.css.
+ */
+
+:root{
+  --bar-h:30px;            /* status bar */
+  --dock-h:74px;           /* bottom dock pill row */
+  --tile:60px;             /* springboard glyph size */
+  --radius-tile:15px;
+}
+
+*{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  font-family:var(--font);color:var(--fg);background:var(--bg);
+  background-image:var(--dither);background-size:3px 3px;
+  overflow:hidden;display:flex;flex-direction:column;
+  -webkit-user-select:none;user-select:none;touch-action:manipulation;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+/* ---- status bar ---- */
+#statusbar{
+  flex:0 0 var(--bar-h);height:var(--bar-h);display:flex;align-items:center;
+  justify-content:space-between;padding:0 14px;font-size:12px;letter-spacing:.04em;
+}
+#statusbar .brand{color:var(--muted);font-size:11px}
+#clock{font-variant-numeric:tabular-nums}
+.conn{display:flex;align-items:center;gap:6px;border:0;background:transparent;
+  color:var(--muted);font-family:var(--font);font-size:11px;cursor:pointer;padding:0}
+.conn .dot{width:7px;height:7px;border-radius:50%;background:var(--muted);
+  border:1px solid var(--panel-border)}
+.conn.online{color:var(--fg)}
+.conn.online .dot{background:var(--accent);border-color:var(--accent)}
+.conn.offline .dot{background:transparent}
+.sb-right{display:flex;align-items:center;gap:12px}
+.lockbtn{display:inline-flex;align-items:center;justify-content:center;border:0;
+  background:transparent;color:var(--muted);cursor:pointer;padding:0}
+.lockbtn svg{width:17px;height:17px;display:block}
+.lockbtn.locked{color:var(--accent)}
+.lockbtn:active{opacity:.6}
+
+/* ---- springboard (home) ---- */
+#home{flex:1;overflow-y:auto;overflow-x:hidden;padding:18px 16px calc(var(--dock-h) + 24px)}
+#grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(78px,1fr));
+  gap:18px 10px;justify-items:center;
+}
+.app-tile{
+  display:flex;flex-direction:column;align-items:center;gap:7px;width:100%;
+  border:0;background:transparent;cursor:pointer;font-family:var(--font);padding:0;
+}
+.app-tile .glyph{
+  width:var(--tile);height:var(--tile);border-radius:var(--radius-tile);
+  display:grid;place-items:center;background:var(--hair);color:var(--fg);
+  border:1px solid var(--panel-border);transition:transform .12s;position:relative;
+}
+.app-tile:active .glyph{transform:scale(.93)}
+.app-tile .glyph svg{width:28px;height:28px}
+.app-tile.accent .glyph{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+/* outbox count: how many shared links are waiting to sync to the deck */
+.tile-badge{
+  position:absolute;top:-5px;right:-5px;min-width:18px;height:18px;padding:0 5px;
+  border-radius:9px;background:var(--accent);color:var(--bg);font-size:11px;
+  line-height:18px;text-align:center;font-weight:600;border:2px solid var(--bg);
+  box-sizing:border-box;}
+.tile-badge[hidden]{display:none}
+.app-tile .label{font-size:11px;color:var(--fg);max-width:100%;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ---- bottom dock ---- */
+#dock{
+  position:fixed;left:50%;transform:translateX(-50%);
+  bottom:calc(env(safe-area-inset-bottom) + 14px);
+  height:var(--dock-h);display:flex;align-items:center;padding:0 12px;
+  background:var(--panel);border:1px solid var(--panel-border);border-radius:22px;
+  box-shadow:0 6px 20px -10px color-mix(in srgb, var(--fg) 45%, transparent);z-index:50;
+}
+#dock-tiles{display:flex;align-items:center;gap:14px}
+#dock .app-tile{flex-direction:row;width:auto}
+#dock .app-tile .label{display:none}
+#home-indicator{
+  position:fixed;left:50%;transform:translateX(-50%);
+  bottom:calc(env(safe-area-inset-bottom) + 5px);
+  width:120px;height:4px;border-radius:2px;background:var(--panel-border);z-index:51;
+}
+
+/* ---- full-screen app pane ---- */
+/* DEFAULT: side pane — slides in right→left, full height (Reader, Files, Remote, Settings…) */
+#pane{
+  position:fixed;inset:0;z-index:100;background:var(--bg);
+  display:flex;flex-direction:column;overflow:hidden;
+  transform:translateX(100%);transition:transform .22s cubic-bezier(.4,0,.2,1);
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+#pane.open{transform:translateX(0)}
+.pane-grab{display:none}                          /* only shown in sheet mode */
+
+/* OPT-IN: bottom sheet (app sets `sheet:'auto'`, e.g. the scanner) — slides up, hugs content,
+   no header. Class overrides win over the base #pane rules above (id + extra class). */
+#pane.sheet-auto{
+  inset:auto 0 0 0;max-height:88vh;
+  border-radius:18px 18px 0 0;border:1px solid var(--panel-border);border-bottom:0;
+  box-shadow:0 -8px 30px -12px color-mix(in srgb, var(--fg) 45%, transparent);
+  transform:translateY(100%);transition:transform .26s cubic-bezier(.4,0,.2,1);
+  padding:0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+#pane.sheet-auto.open{transform:translateY(0)}
+#pane.sheet-auto .pane-head{display:none}         /* redundant for a short sheet — CANCEL + grab suffice */
+#pane.sheet-auto .pane-body{flex:0 0 auto;overflow:visible}
+#pane.sheet-auto .pane-grab{display:block;flex:0 0 auto;width:40px;height:4px;border-radius:2px;
+  background:var(--panel-border);margin:8px auto 2px}
+
+#pane-scrim{position:fixed;inset:0;z-index:99;background:#000;opacity:0;pointer-events:none;
+  transition:opacity .26s}
+#pane-scrim.open{opacity:.45;pointer-events:auto}
+.pane-head{
+  flex:0 0 46px;height:46px;display:flex;align-items:center;gap:8px;padding:0 8px;
+  border-bottom:1px solid var(--panel-border);background:var(--hair);
+}
+.pane-btn{width:36px;height:36px;border:0;border-radius:9px;background:transparent;
+  color:var(--fg);font-size:20px;cursor:pointer;display:grid;place-items:center}
+.pane-btn:active{background:var(--fg);color:var(--bg)}
+.pane-title{flex:1;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis}
+.pane-spacer{width:36px}
+.pane-body{flex:1;overflow:auto;position:relative;-webkit-user-select:text;user-select:text}
+.pane-body iframe{width:100%;height:100%;border:0;background:var(--bg)}
+
+/* ---- shared in-pane primitives (1-bit, theme-driven) ---- */
+.m-pad{padding:14px}
+.m-row{display:flex;gap:8px;align-items:center}
+.m-input{flex:1;font-family:var(--font);font-size:14px;color:var(--fg);
+  background:var(--bg);border:1px solid var(--panel-border);border-radius:8px;padding:10px 12px}
+.m-btn{font-family:var(--font);font-size:14px;color:var(--fg);background:var(--bg);
+  border:1px solid var(--panel-border);border-radius:8px;padding:10px 14px;cursor:pointer}
+.m-btn:active{background:var(--fg);color:var(--bg)}
+.m-list{display:flex;flex-direction:column}
+.m-item{display:flex;align-items:center;gap:10px;padding:13px 14px;
+  border-bottom:1px solid var(--hair);cursor:pointer;font-size:14px}
+.m-item:active{background:var(--hair)}
+.m-item .sub{color:var(--muted);font-size:12px;margin-left:auto;flex:none}
+.m-ic{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;flex:none}
+.m-ic svg{width:100%;height:100%}
+.m-nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.m-muted{color:var(--muted)}
+.m-kv{display:flex;justify-content:space-between;padding:11px 14px;border-bottom:1px solid var(--hair);font-size:13px}
+.m-kv b{font-weight:600}
+.m-item.playing{color:var(--accent)}
+
+/* ---- slides: fill the pane; while presenting, the notes take the height left and scroll in it ---- */
+.m-talk{position:absolute;inset:0;display:flex;flex-direction:column}
+.m-talk>.m-row{flex:none}
+.m-talk>.m-pad{flex:1;min-height:0;overflow:auto}
+.m-talk>.m-pad.presenting{display:flex;flex-direction:column;overflow:hidden}
+.m-talk>.m-pad.presenting>*{flex:none}
+.m-talk>.m-pad.presenting>.m-notes{flex:1 1 auto;min-height:3.5em;overflow-y:auto;overscroll-behavior:contain}
+
+/* ---- music: fill the pane so the player pins to the bottom on short lists ---- */
+.m-music{position:absolute;inset:0;display:flex;flex-direction:column}
+.m-music>.m-list{flex:1;min-height:0;overflow:auto}
+.m-nowbar{flex:none;display:flex;gap:12px;align-items:center;
+  padding:12px 14px;border-top:1px solid var(--panel-border);background:var(--bg)}
+.m-cover{width:54px;height:54px;flex:none;background:var(--hair);
+  border:1px solid var(--hair);image-rendering:pixelated}
+.m-nowmeta{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px}
+.m-nowtitle{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px}
+.m-seek{height:4px;background:var(--hair);overflow:hidden;cursor:pointer}
+.m-seek i{display:block;height:100%;background:var(--accent);
+  transform:scaleX(0);transform-origin:left;will-change:transform}
+.m-nowctrls{display:flex;align-items:center;gap:14px}
+.m-pbtn{font-family:var(--font);font-size:15px;color:var(--fg);background:none;
+  border:none;padding:2px 2px;cursor:pointer}
+.m-pbtn:active{color:var(--accent)}
+.m-time{margin-left:auto;font-size:11px}
+.reader-body{padding:16px 18px;line-height:1.5;font-size:15px}
+.reader-body h1,.reader-body h2,.reader-body h3{line-height:1.25}
+.reader-body a{color:var(--accent)}
+.reader-body img{max-width:100%;height:auto}
+.swatch{width:26px;height:26px;border-radius:7px;border:1px solid var(--panel-border)}
+
+/* ---- identity overlays: onboarding + lock (full-screen, above everything) ---- */
+.overlay{
+  position:fixed;inset:0;z-index:200;background:var(--bg);display:none;
+  align-items:center;justify-content:center;overflow-y:auto;
+  padding:calc(env(safe-area-inset-top) + 24px) 22px calc(env(safe-area-inset-bottom) + 24px);
+}
+.overlay.active{display:flex}
+.ob-inner{display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center;
+  width:100%;max-width:320px}
+.ob-title{margin:0;letter-spacing:.22em;font-size:20px}
+.ob-sub{color:var(--muted);font-size:11px;letter-spacing:.18em}
+.ob-meta{color:var(--muted);font-size:10px;letter-spacing:.12em}
+.ob-row{display:flex;gap:8px}
+.ob-badge{display:inline-block;background:var(--fg);color:var(--bg);padding:4px 11px;
+  border-radius:5px;font-size:11px;font-weight:600;letter-spacing:.08em}
+.ob-note{color:var(--muted);font-size:11px;max-width:270px;line-height:1.45}
+.link-btn{border:0;background:transparent;color:var(--muted);text-decoration:underline;
+  font-family:var(--font);font-size:12px;padding:6px;cursor:pointer}
+
+#avatar-container{width:230px;height:230px;border-radius:16px;overflow:hidden;position:relative;
+  border:2px solid var(--panel-border);background:var(--bg)}
+#cam{display:none}
+#avatar-canvas{width:100%;height:100%;object-fit:cover;display:block}
+.cd{display:none;position:absolute;inset:0;align-items:center;justify-content:center;
+  background:color-mix(in srgb, var(--bg) 45%, transparent)}
+.cd.active{display:flex}
+#cd-num{font-size:5rem;font-weight:bold;color:var(--accent);line-height:1}
+#flash{display:none;position:absolute;inset:0;background:var(--fg)}
+#flash.active{display:block;animation:obflash .3s ease-out forwards}
+@keyframes obflash{from{opacity:.85}to{opacity:0}}
+#frozen{display:none;position:absolute;inset:0;border:10px solid var(--accent-soft);
+  border-radius:16px;pointer-events:none}
+#frozen.active{display:block}
+
+/* primary button (onboarding/lock CTAs) — accent-filled */
+.m-btn.primary{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+.m-btn.primary:active{background:var(--fg);border-color:var(--fg)}
+.m-btn.primary:disabled{opacity:.4;background:transparent;color:var(--muted);
+  border-color:var(--panel-border)}
+
+canvas.avatar{display:block}
+.lock-avatar{width:150px;height:150px;border-radius:16px;border:2px solid var(--accent);
+  background:var(--bg);display:block}
+.lock-codename{font-size:22px;font-weight:600;letter-spacing:.06em}
+
+/* recovery phrase grid (onboarding, shown once) */
+.recovery-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;width:100%;max-width:320px;text-align:left}
+.rec-word{border:1px solid var(--panel-border);border-radius:6px;padding:8px 10px;font-size:14px;
+  display:flex;align-items:baseline;gap:8px}
+.rec-n{color:var(--muted);font-size:11px;min-width:16px}
+
+/* slide-to-unlock — classic mobile-OS idiom, 1-bit */
+.slide-unlock{position:relative;width:100%;max-width:280px;height:58px;border-radius:29px;
+  background:var(--hair);border:1px solid var(--panel-border);display:flex;align-items:center;
+  overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+.slide-label{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  color:var(--muted);font-size:13px;letter-spacing:.12em;pointer-events:none;
+  opacity:calc(1 - var(--p, 0))}
+.slide-thumb{position:relative;z-index:2;width:50px;height:50px;margin:4px;border-radius:50%;
+  background:var(--accent);color:var(--bg);display:grid;place-items:center;font-size:22px;
+  cursor:grab;touch-action:none;flex:0 0 auto}
+.slide-thumb:active{cursor:grabbing}
+
+/* QR scanner (Scan app) — nexus look: centred square viewport, accent frame + glow,
+   corner brackets, scan line, and the camera tinted to the theme accent (duotone). jsQR. */
+.scan-wrap{display:flex;flex-direction:column;align-items:center;gap:14px;padding:22px 18px 26px}
+.scan-heading{color:var(--muted);font-size:12px;letter-spacing:.2em}
+.scan-view{position:relative;width:min(80vw,300px);aspect-ratio:1/1;background:#000;overflow:hidden;
+  border:1px solid var(--accent);box-shadow:0 0 18px color-mix(in srgb, var(--accent) 38%, transparent)}
+.scan-view video{width:100%;height:100%;object-fit:cover;display:block;
+  filter:grayscale(1) contrast(1.15) brightness(.92)}
+/* tint the (grayscale) camera to the active theme accent — duotone, theme-reactive */
+.scan-tint{position:absolute;inset:0;background:var(--accent);mix-blend-mode:multiply;pointer-events:none}
+.scan-canvas{display:none}
+.scan-corners{position:absolute;inset:0;pointer-events:none}
+.scan-corners .corner{position:absolute;width:22px;height:22px;border:2px solid var(--accent)}
+.scan-corners .corner.tl{top:10px;left:10px;border-width:2px 0 0 2px}
+.scan-corners .corner.tr{top:10px;right:10px;border-width:2px 2px 0 0}
+.scan-corners .corner.bl{bottom:10px;left:10px;border-width:0 0 2px 2px}
+.scan-corners .corner.br{bottom:10px;right:10px;border-width:0 2px 2px 0}
+.scan-corners .scan-line{position:absolute;left:10px;right:10px;height:2px;background:var(--accent);
+  box-shadow:0 0 8px var(--accent);animation:scanline 2s ease-in-out infinite}
+@keyframes scanline{0%,100%{top:10px;opacity:1}50%{top:calc(100% - 12px);opacity:.5}}
+.scan-view.hit .corner{border-color:var(--fg)}
+.scan-view.hit .scan-line{display:none}
+.scan-status{border:1px solid var(--panel-border);color:var(--muted);padding:6px 16px;
+  font-size:12px;letter-spacing:.14em}
+.scan-status.scanning,.scan-status.ok{color:var(--accent);border-color:var(--accent)}
+.scan-status.err{color:#e5484d;border-color:#e5484d}
+.scan-hint{color:var(--muted);font-size:12px;text-align:center;max-width:270px;line-height:1.4}
+.scan-result{text-align:center;word-break:break-all;font-size:14px;max-width:300px}
+.scan-actions{display:flex;gap:10px;margin-top:2px}
+.scan-actions .m-btn{min-width:104px}
+
+/* ── system monitor (graphical, mirrors the desktop shell's gauges) ──────────
+   Bars + sparkline animate via transform (scaleX/scaleY), not width/height —
+   the deck's thermal-safe idiom (see app/desktop/RENDERING.md). */
+.mon{padding:14px}
+.mon-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mon-gauge{background:var(--hair);border:1px solid var(--panel-border);border-radius:10px;padding:12px;min-width:0}
+.mon-gauge h4{margin:0 0 4px;font-size:11px;color:var(--muted);font-weight:600;
+  text-transform:uppercase;letter-spacing:.5px}
+.mon-big{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--fg)}
+.mon-big.hot{color:#e0a000}                       /* SoC running warm (≥75°) */
+.mon-bar{height:6px;border-radius:4px;background:var(--panel-border);margin-top:8px;overflow:hidden}
+.mon-bar i{display:block;width:100%;height:100%;background:var(--accent);border-radius:4px;
+  transform-origin:left;transform:scaleX(0);transition:transform .4s ease-out}
+.mon-spark{display:flex;gap:2px;align-items:flex-end;height:30px;margin-top:8px}
+.mon-spark i{flex:1;min-width:0;background:var(--accent);border-radius:2px;opacity:.85;height:100%;
+  transform-origin:bottom;transform:scaleY(.04);transition:transform .4s ease-out}
+.mon-gauge small{color:var(--muted);font-size:11px;display:block;margin-top:7px;font-variant-numeric:tabular-nums}
+.mon-meta{margin-top:12px;border:1px solid var(--panel-border);border-radius:10px;overflow:hidden}
+.mon-meta .m-kv{border-bottom:1px solid var(--hair)}
+.mon-meta .m-kv:last-child{border-bottom:0}
+.mon-off{padding:18px;text-align:center}
+.mon-act{margin-top:12px}
+.mon-act h4{margin:0 0 6px;font-size:11px;font-weight:400;letter-spacing:1px;color:var(--muted)}
+.mon-tasks{font-size:13px}
+.mon-tasks:empty::before{content:attr(data-empty);color:var(--muted)}
+.mon-task{display:grid;grid-template-columns:minmax(0,1fr) 28% 7ch;gap:10px;align-items:center;padding:7px 0;border-top:1px solid var(--hair)}
+.mon-task:first-child{border-top:0}
+.mon-task .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mon-task .mon-bar{margin-top:0}
+.mon-task .tm{text-align:right;font-variant-numeric:tabular-nums}
+.mon-task.pending .mon-bar{visibility:hidden}
+
+/* ── profile app ─────────────────────────────────────────────── */
+.prof{display:flex;flex-direction:column;align-items:center;gap:12px;padding:24px 16px;text-align:center}
+.prof-av{width:160px;height:160px;border-radius:16px;border:2px solid var(--accent);background:var(--bg)}
+.prof-name{font-size:20px;letter-spacing:.12em;font-weight:700;color:var(--fg)}
+.prof-did{font-size:11px;word-break:break-all;max-width:280px}
+.prof-edit{width:100%;max-width:280px;margin-top:4px}
+.prof-hint{line-height:1.45;max-width:300px}
+
+/* the ask sheet (app.js, ask): one question at a time, symbios' bottom sheet above everything, its words in the
+   text colour (the muted one was too faint on the phone: Gab, 2026-10-27) */
+#ask{position:fixed;inset:auto 0 0 0;z-index:120;background:var(--bg);max-height:88vh;overflow:auto;
+  border-radius:18px 18px 0 0;border:1px solid var(--panel-border);border-bottom:0;
+  box-shadow:0 -8px 30px -12px color-mix(in srgb, var(--fg) 45%, transparent);
+  transform:translateY(100%);transition:transform .26s cubic-bezier(.4,0,.2,1);
+  padding:0 calc(18px + env(safe-area-inset-right)) calc(22px + env(safe-area-inset-bottom)) calc(18px + env(safe-area-inset-left))}
+#ask.open{transform:translateY(0)}
+#ask .pane-grab{display:block;width:40px;height:4px;border-radius:2px;background:var(--panel-border);margin:8px auto 14px}
+#ask-scrim{position:fixed;inset:0;z-index:119;background:#000;opacity:0;pointer-events:none;transition:opacity .26s}
+#ask-scrim.open{opacity:.55;pointer-events:auto}
+.ask-title{color:var(--fg);font-size:17px;font-weight:600}
+.ask-code{color:var(--accent);font-size:46px;letter-spacing:.25em;text-align:center;margin:18px 0 6px}
+.ask-says{color:var(--fg);font-size:14px;line-height:1.5;margin:12px 0 20px}
+.ask-field{display:block;width:100%;box-sizing:border-box;margin:0 0 10px}
+.ask-fail{color:var(--fg);font-size:13px;min-height:1.4em;margin:0 0 10px}
+.ask-btns{display:flex;gap:10px}
+.ask-btns .m-btn{flex:1;padding-top:12px;padding-bottom:12px}
+
+/* files: how the kinds show (utils/files.js): covers in a grid, lines in a list, a phone where a file is kept */
+.f-scroll{flex:1;min-height:0;overflow:auto;padding-bottom:8px}
+.f-tabs{padding:12px 12px 6px;flex:none;gap:8px}
+.f-tabs .m-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:8px}
+.f-tabs svg{width:16px;height:16px;flex:none}
+.f-head{padding:16px 16px 4px;font-size:11px;letter-spacing:.12em;text-transform:uppercase}
+.f-path{padding:4px 16px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.f-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:14px 10px;padding:10px 14px} /* three on a phone (Gab, 1 Nov) */
+.f-tile{all:unset;cursor:pointer;min-width:0;display:block}
+.f-tile:active .f-cover{border-color:var(--accent)}
+.f-cover{position:relative;aspect-ratio:1;border:1px solid var(--hair);background:var(--hair) center/cover no-repeat;
+  display:flex;align-items:center;justify-content:center;color:var(--muted)}
+.f-cover>svg{width:34%;height:34%}
+.f-cover.has>svg{display:none}
+.f-name{margin-top:6px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.f-sub{font-size:11px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.f-mark{display:inline-flex;width:16px;height:16px;flex:none;color:var(--accent)}
+.f-mark:empty{display:none}
+.f-mark svg{width:100%;height:100%}
+.f-cover .f-mark{position:absolute;right:6px;bottom:6px;width:20px;height:20px;padding:2px;background:var(--bg);border-radius:4px}
+.f-line .m-nm{display:flex;flex-direction:column;gap:3px}
+.f-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.f-text{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.f-line.playing .f-title{color:var(--accent)}
+.f-x{margin:-10px -6px -10px 4px;padding:10px 14px;font-size:20px}
+.f-foot{flex:none;padding:8px 12px;gap:8px}
+.f-foot .m-btn{flex:1}
+.m-cover svg{width:60%;height:60%;margin:20%;color:var(--muted)}
+.f-header{display:flex;gap:14px;align-items:flex-end;padding:12px 16px 10px}
+.f-header .f-cover{width:96px;flex:none}
+.f-hname{font-size:17px;line-height:1.25;margin-bottom:4px}
+/* covers in the theme's colours: a duotone made of --bg and --accent only (utils/files.js, paintCover). The picture in
+   grey is blended onto --accent, then --bg is laid over it: on a dark theme its darks become --bg and its lights --accent
+   (multiply, lighten); on a light theme the other way round (screen, darken). A new theme says which it is, nothing else. */
+:root{--cover-ink:screen;--cover-paper:darken}
+[data-theme="ink"],[data-theme="phosphor"],[data-theme="amber"],[data-theme="slate"]{--cover-ink:multiply;--cover-paper:lighten}
+.f-cover.has,.m-cover.has{position:relative;overflow:hidden;isolation:isolate;background:var(--accent)}
+.duo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:grayscale(1) contrast(1.15);mix-blend-mode:var(--cover-ink)}
+.f-cover.has::after,.m-cover.has::after{content:"";position:absolute;inset:0;background:var(--bg);mix-blend-mode:var(--cover-paper);pointer-events:none}
+.f-cover.has .f-mark{z-index:1}
+/* the theme's swatches in Settings (utils/theme.js): each shows its own theme's background and accent */
+.t-pick{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px}
+.t-swatch{all:unset;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 4px;border:1px solid var(--hair);border-radius:8px;font-size:12px}
+.t-swatch.on{border-color:var(--accent);color:var(--accent)}
+.t-swatch i{display:block;width:100%;height:30px;border-radius:5px;border:1px solid var(--panel-border);background:linear-gradient(135deg,var(--bg) 0 55%,var(--accent) 55% 100%)}

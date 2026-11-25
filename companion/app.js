@@ -1,0 +1,1439 @@
+// The desk's companion on the phone. The look is symbios's mobile shell (status bar, springboard,
+// panes sliding in; css/mobile.css unchanged); the code is its own and small. The apps: Reader (articles kept on this
+// phone, readable with no network), Shared (links and files shared to it, waiting for the desk), Memos (voice notes
+// recorded here; the ones kept go to the desk's inbox, which writes their text), Monitor
+// (how the desk is doing), Notes (the desk's ~/Notes, kept here to read and write; notes.js), Player (the desk's Music, Voice
+// memos and Podcasts played on the phone, kept here for away; player.js), Remote (the phone as the desk's trackpad), Slides (the phone as the clicker
+// of a deck on the desk, with the notes and the next slide) and Settings (where the desk is, sync, install). The desk does the
+// work on a link; the phone only carries it there and brings the article back.
+
+import * as trust from "./trust.js";
+import { notesApp, syncNotes } from "./notes.js";
+import { playerApp } from "./player.js";
+import { themePicker, setTheme, current as themeNow } from "./utils/theme.js";
+setTheme(themeNow()); // the phone's bar above the page in the theme chosen (index.html set the page's before it drew)
+
+const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
+const text = (tag, cls, t) => Object.assign(el(tag, cls), { textContent: t ?? "" });
+// a short message over everything, as symbios mobile shows them
+// a short message at the top, under the status bar, clear of the ask sheet rising from the bottom (Gab, 24 Nov: "this
+// green notification ... is overlapping with the app sheet at the bottom of the screen ... should be on the top of the screen")
+const toast = (msg, ok) => {
+  const t = text("div", "m-toast", msg);
+  t.style.cssText = "position:fixed;left:50%;top:calc(env(safe-area-inset-top, 0px) + var(--bar-h, 36px) + 8px);transform:translateX(-50%);z-index:99999;padding:10px 16px;border-radius:10px;font-size:13px;max-width:84%;text-align:center;box-shadow:0 6px 20px rgba(0,0,0,.45);background:" + (ok === false ? "#664400" : "var(--accent,#0f0)") + ";color:var(--bg,#000)";
+  document.body.append(t);
+  setTimeout(() => t.remove(), 3400);
+};
+
+// icons: symbios mobile's 1-bit line glyphs
+const I = {
+  reader: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 5h7v14H4zM13 5h7v14h-7"/><path d="M6.5 8.5h2M6.5 11h2M15.5 8.5h2M15.5 11h2"/></svg>',
+  lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
+  status: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 13h4l2 5 4-12 2 7h6"/></svg>',
+  settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>',
+  share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="6" cy="12" r="2.4"/><circle cx="17" cy="6" r="2.4"/><circle cx="17" cy="18" r="2.4"/><path d="M8.2 11l6.6-3.6M8.2 13l6.6 3.6"/></svg>',
+  book: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 0-3 3z"/><path d="M18 4h1v13"/></svg>',
+  trackpad: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M12 8v8M12 8l-2 2M12 8l2 2"/></svg>',
+  slides: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="12" rx="1"/><path d="M12 16v4M8 20h8M10 8l4 2-4 2z"/></svg>',
+  mic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></svg>',
+  file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 15h6M9 18h4"/></svg>',
+  talk: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 5h16v11H10l-5 4v-4H4z"/><path d="M8 9l2 1.5L8 12M12 12h3"/></svg>',
+  globe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.7 2.7 2.7 15.3 0 18M12 3c-2.7 2.7-2.7 15.3 0 18"/></svg>',
+};
+
+// what the phone keeps (IndexedDB: db, store, all, put, drop, setting) is in db.js, shared with the service worker
+
+// ---- the desk, over the local network (plain http: it has no name the world knows) ----
+// body: JSON, or a Blob sent as it is (a file for the inbox). Over the cable the desk is always at CABLE; ping()
+// tries it when the saved address doesn't answer, so plugging in is enough (Gab, 2026-10-27: "a default 10.55.0.1
+// try could help drastically"). The saved address stays as it is, for when the phone is back on the WiFi.
+const CABLE = "10.55.0.1";
+let cable = false;
+async function desk(path, body, ms, blob) {
+  const at = cable ? CABLE : await setting("desk");
+  if (!at) throw Object.assign(new Error("no desk address yet"), { away: true });
+  // the desk keeps every route locked but a few (its /api/hello says which): once this phone owns the desk, the others go sealed
+  if (!(hello?.open || ["GET /api/hello"]).includes((body ? "POST " : "GET ") + path.split("?")[0]) && await trust.owned()) return sealedDesk(at, path, body, ms, blob);
+  const stop = new AbortController(), timer = setTimeout(() => stop.abort(), ms || (body ? 45000 : 8000));
+  const post = body instanceof Blob ? { method: "POST", headers: { "Content-Type": body.type || "application/octet-stream" }, body }
+    : body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {};
+  try {
+    const r = await fetch("http://" + at + path, { signal: stop.signal, ...post });
+    if (blob && r.ok) return await r.blob(); // a picture, kept as it is
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw Object.assign(new Error(data.error || "the desk answered " + r.status), { refused: r.status === 422 });
+    return data;
+  } catch (e) {
+    throw e.refused !== undefined ? e : Object.assign(new Error("the desk is out of reach"), { away: true });
+  } finally { clearTimeout(timer); }
+}
+
+// the desk (its board id) that refused this phone's sessions: this phone thinks it owns it, the desk doesn't know it
+// (another phone took it over, the reset, or a lost write: 2026-10-27, the cable out right after a takeover)
+let unknownTo = null;
+async function sealedDesk(at, path, body, ms, blob) {
+  const bytes = body instanceof Blob ? new Uint8Array(await body.arrayBuffer()) : body ? new TextEncoder().encode(JSON.stringify(body)) : null;
+  let got;
+  try {
+    got = await trust.request(at, body ? "POST" : "GET", path, bytes, ms || (body ? 45000 : 8000));
+  } catch (e) {
+    if (e.status) throw Object.assign(e, { refused: e.status === 422 });
+    if (/doesn't know this phone/.test(e.message)) {
+      if (unknownTo !== hello?.board) { unknownTo = hello?.board; claimCard(); }
+      throw Object.assign(new Error("the desk doesn't know this phone any more"), { refused: false });
+    }
+    throw Object.assign(new Error("the desk is out of reach"), { away: true });
+  }
+  return blob ? new Blob([got]) : JSON.parse(new TextDecoder().decode(got) || "{}");
+}
+
+// ---- finding the desk on a new network: a page cannot list what is on the network, so it knocks
+// on every address of the likely ones and keeps the first that says it is the desk ----
+const NETS = ["192.168.1", "192.168.0", "10.0.0", "192.168.2", "10.0.1", "192.168.178", "192.168.68", "192.168.86",
+  "192.168.43", "172.20.10", "10.42.0", "192.168.100", "192.168.10", "192.168.50"];
+async function knock(hosts, ms) {
+  const stop = new AbortController(), timer = setTimeout(() => stop.abort(), ms);
+  try {
+    return await Promise.any(hosts.map(async host => {
+      const data = await (await fetch("http://" + host + "/api/hello", { signal: stop.signal })).json();
+      if (!data.desk) throw new Error("not the desk");
+      return host;
+    }));
+  } catch { return null; } finally { clearTimeout(timer); stop.abort(); }
+}
+async function hunt(step) {
+  const at = await setting("desk"), mine = /^(\d+\.\d+\.\d+)\.\d+$/.exec(at || "")?.[1];
+  step("trying the names");
+  const named = await knock([...new Set([at, "desk.lan", "perma.local"].filter(Boolean))], 3000);
+  if (named) return named;
+  const nets = [...new Set([mine, ...NETS].filter(Boolean))];
+  for (const [i, net] of nets.entries()) {
+    step(`looking on ${net}.x (${i + 1} of ${nets.length})`);
+    const found = await knock(Array.from({ length: 254 }, (_, n) => net + "." + (n + 1)), 3000);
+    if (found) return found;
+  }
+  return null;
+}
+
+// ---- or ask the desk itself, over Bluetooth: it says where it is, on any WiFi (desk-bluetooth) ----
+const BT_SERVICE = "d35c0001-5e5a-4d3e-9b1f-6c0de5c0de01", BT_WHERE = "d35c0002-5e5a-4d3e-9b1f-6c0de5c0de01";
+const BT_SESSION = "d35c0006-5e5a-4d3e-9b1f-6c0de5c0de01";
+// once this phone owns a desk, what it writes over Bluetooth is sealed in a session opened on connecting (the desk's
+// SECURE-LINK.md, step 4); a desk with no owner yet (or an older one, with no session value) takes it plain, as before
+async function bleSealer(service) {
+  if (!await trust.owned()) return null;
+  try { return await trust.overBluetooth(await service.getCharacteristic(BT_SESSION)); } catch { return null; }
+}
+const bleWrite = async (value, seal, text) => value.writeValueWithoutResponse(seal ? await seal.steer(text) : new TextEncoder().encode(text));
+async function askBluetooth(step) {
+  const device = await navigator.bluetooth.requestDevice({ filters: [{ services: [BT_SERVICE] }] });
+  step("connecting to " + (device.name || "the desk"));
+  try {
+    const server = await device.gatt.connect();
+    const value = await (await (await server.getPrimaryService(BT_SERVICE)).getCharacteristic(BT_WHERE)).readValue();
+    return JSON.parse(new TextDecoder().decode(value)); // {name, address, wifi}
+  } finally { device.gatt.disconnect(); }
+}
+
+// give the desk a WiFi over Bluetooth: it joins while the phone stays connected, then says how it went.
+// Once the desk has an owner, it takes this only from the owner's phone, sealed.
+const BT_JOIN = "d35c0003-5e5a-4d3e-9b1f-6c0de5c0de01";
+async function joinBluetooth(ssid, password, step) {
+  const device = await navigator.bluetooth.requestDevice({ filters: [{ services: [BT_SERVICE] }] });
+  step("connecting to " + (device.name || "the desk"));
+  try {
+    const service = await (await device.gatt.connect()).getPrimaryService(BT_SERVICE), join = await service.getCharacteristic(BT_JOIN);
+    const read = async () => JSON.parse(new TextDecoder().decode(await join.readValue())), seal = await bleSealer(service);
+    await join.writeValueWithResponse(seal ? await seal.join({ ssid, password }) : new TextEncoder().encode(JSON.stringify({ ssid, password })));
+    step("sent; the desk is trying “" + ssid + "”");
+    for (let s = 0; s < 180; s += 2) { // desk-wifi waits up to a minute per try, and may try twice
+      await new Promise(r => setTimeout(r, 2000));
+      const it = await read();
+      if (it.state === "done") return it; // {ssid, ip, joined, error}
+      step(`the desk is trying “${ssid}” (${s + 2} s)`);
+    }
+    throw new Error("the desk did not say how it went");
+  } finally { device.gatt.disconnect(); }
+}
+
+// hand the waiting links over, then bring back the articles this phone doesn't have yet
+let syncing = false, again = false;
+async function sync(loud, quiet) {
+  if (syncing) { again = true; return; } // asked during a sync: once more after it, for what came meanwhile
+  syncing = true;
+  try {
+    let sent = 0;
+    for (const w of (await all("waiting")).filter(w => !w.why)) {
+      try {
+        await desk("/api/articles", { url: w.url });
+        await drop("waiting", w.url);
+        sent++;
+      } catch (e) {
+        if (!e.refused) throw e;
+        await put("waiting", { ...w, why: e.message }); // a paywall, a page with no article: it stays, with the reason
+      }
+    }
+    // the memos kept for the desk go to its inbox with the time they were recorded; once there, they leave the phone
+    let heard = 0;
+    for (const m of (await all("memos")).filter(m => m.keep)) {
+      try {
+        await desk("/api/inbox?name=" + encodeURIComponent(memoName(m)) + "&modified=" + m.at + "&source=recorder", m.blob, 180000);
+        await drop("memos", m.at);
+        heard++;
+      } catch (e) {
+        if (e.away) throw e;
+        await put("memos", { ...m, keep: false, why: e.message }); // too large, refused: it stays here, with the reason
+      }
+    }
+    const { sent: wrote, copies } = await syncNotes(desk); // the notes sent to the desk, and those changed there brought back (notes.js)
+    // files shared from other apps go to the desk's inbox, which decides where they go (a deck with its notes
+    // pages → Slides, any other PDF → Documents…, ~/Inbox/rules.md); once there, they leave the phone
+    let handed = 0, making = 0, there = 0;
+    for (const f of (await all("files")).filter(f => !f.why)) {
+      try {
+        const r = await desk("/api/inbox?name=" + encodeURIComponent(f.name) + "&modified=" + f.modified + "&source=share",
+          f.blob, 60000 + Math.ceil(f.size / 1e6) * 10000); // a big deck over a slow WiFi takes its time
+        await drop("files", f.id);
+        if (r.duplicate) there++; else handed++;
+        if (!r.duplicate && /^Slides\//.test(r.went || "")) making++;
+      } catch (e) {
+        if (e.away) throw e;
+        await put("files", { ...f, why: e.message }); // too large, refused: it stays here, with the reason
+      }
+    }
+    const have = new Set((await all("articles")).map(a => a.file));
+    const fresh = (await desk("/api/articles")).articles.filter(a => !have.has(a.file));
+    for (const card of fresh) {
+      const { text: body } = await desk("/api/fs/read?path=" + encodeURIComponent("Articles/" + card.file));
+      await put("articles", { ...card, text: body });
+    }
+    const decks = await syncDecks();
+    await put("settings", Date.now(), "synced");
+    const bits = [sent && sent + " link" + (sent > 1 ? "s" : "") + " handed over", heard && heard + " memo" + (heard > 1 ? "s" : "") + " sent", wrote && wrote + " note" + (wrote > 1 ? "s" : "") + " sent",
+      copies && copies + " note" + (copies > 1 ? "s" : "") + " changed on the desk too: yours kept beside " + (copies > 1 ? "them" : "it") + " as “(phone)”",
+      handed && handed + " file" + (handed > 1 ? "s" : "") + " handed over" + (making ? " (" + (making > 1 ? making + " decks" : "a deck") + " being made)" : ""),
+      there && there + " file" + (there > 1 ? "s were" : " was") + " already on the desk", fresh.length && fresh.length + " new article" + (fresh.length > 1 ? "s" : ""),
+      decks && decks + " deck" + (decks > 1 ? "s" : "")].filter(Boolean);
+    if ((bits.length && !quiet) || loud) toast(bits.length ? "Synced — " + bits.join(", ") : "Up to date", true);
+  } catch (e) {
+    if (loud) toast(e.away ? "The desk is out of reach" : "Couldn't sync (" + e.message + ")", false);
+  } finally {
+    syncing = false;
+    badges();
+    if (open && APPS[open].fresh) APPS[open].fresh();
+    if (again) { again = false; sync(false, true); }
+  }
+}
+
+// ---- what happens on the desk (its /api/changes, signals.py): while this app is open and the desk in reach
+// over the WiFi, a new article or deck there brings a quiet sync (only what is new comes); the desk's heavy
+// work feeds Monitor's Activity. Nothing over Bluetooth: it can't bring files to the phone anyway ----
+let deskTasks = [], deskSkew = 0;
+async function follow() { // started at the end, once wasOnline exists
+  let seq = -1, boot = 0;
+  for (;;) {
+    if (document.hidden || !wasOnline) { await new Promise(r => setTimeout(r, 3000)); continue; }
+    try {
+      const d = await desk(`/api/changes?after=${seq}&boot=${boot}`, null, 30000);
+      deskSkew = Date.now() / 1000 - d.now;
+      deskTasks = d.tasks;
+      APPS.status.activity?.();
+      if (seq !== -1 && (d.missed || d.changes.some(c => /^(Articles|Slides|Notes)(\/|$)/.test(c.folder)))) sync(false, true);
+      // a screen asking for its code, or to release the desk: asked now, not at the next look up to 15 s later (Gab,
+      // 24 Nov: "it takes a very long time for these codes to show up inside the app sheet")
+      if (seq !== -1 && d.changes.some(c => c.folder === ".lock")) screensCard();
+      seq = d.seq; boot = d.boot;
+    } catch { await new Promise(r => setTimeout(r, 3000)); }
+  }
+}
+
+// the decks in the desk's ~/Slides, kept here for the talk: the notes and the small pictures, so the phone
+// shows them with only Bluetooth between it and the desk. The pictures are fetched again only when the
+// deck's PDF changed; the notes each time (they are small, and may have been edited). Answers how many
+// decks came in or changed pictures.
+async function syncDecks() {
+  let names;
+  let preparing = [];
+  try { ({ decks: names, preparing = [] } = await desk("/api/slides")); } catch (e) { if (e.away) throw e; return 0; } // a desk without slides yet
+  const kept = new Map((await all("decks")).map(d => [d.name, d]));
+  let changed = 0;
+  for (const name of names) {
+    if (preparing.includes(name)) continue; // its slides are being made on the desk: kept as it was, taken at a later sync
+    const d = await desk("/api/slides/deck?name=" + encodeURIComponent(name), null, 30000);
+    const old = kept.get(name);
+    let thumbs = old && old.made === d.made && old.thumbs.length === d.count ? old.thumbs : null;
+    if (!thumbs) {
+      thumbs = [];
+      for (let i = 1; i <= d.count; i++) thumbs.push(await desk("/api/fs/raw?path=" + encodeURIComponent(d.path + "t" + String(i).padStart(2, "0") + ".jpg"), null, 0, true));
+      changed++;
+    }
+    await put("decks", { name, count: d.count, made: d.made, notes: d.notes, thumbs });
+  }
+  for (const name of kept.keys()) if (!names.includes(name)) await drop("decks", name); // gone from the desk
+  return changed;
+}
+
+// ---- installing: the browser says when it is ready to; Settings then offers a button ----
+let offer = null;
+addEventListener("beforeinstallprompt", e => { e.preventDefault(); offer = e; });
+addEventListener("appinstalled", () => { offer = null; toast("Installed on this phone", true); });
+// only Chromium browsers let a page open their install dialog (beforeinstallprompt); the others are told where it is
+// in their menu (Gab, 2026-11-23: "not every browser lets you also add the app as a progressive web app")
+const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const installed = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+function howToInstall() {
+  const ua = navigator.userAgent;
+  if (ios) return "Tap Share (the square with an arrow), then “Add to Home Screen”.";
+  if (/Firefox/.test(ua)) return "Open the browser's menu (⋮) and choose “Install” or “Add to Home screen”.";
+  if (/SamsungBrowser/.test(ua)) return "Open the browser's menu (☰) and choose “Add page to”, then “Home screen”.";
+  if (/Chrome|Chromium/.test(ua)) return "Open the browser's menu (⋮) and choose “Install app” or “Add to Home screen”.";
+  return "If this browser's menu has “Install” or “Add to Home screen”, use it. If it has neither, open this page in Chrome or Firefox to install it; meanwhile the companion works in this tab.";
+}
+// true once installed from here. claiming: the companion was opened by a desk's QR code. On an iPhone the app on the
+// home screen keeps its own storage, apart from Safari's: it claims there, with the code typed
+async function installSheet(claiming) {
+  if (installed()) return true;
+  if (!offer) await new Promise(r => setTimeout(r, 2500)); // the browser says it can install a moment after the page opens
+  const then = ios && claiming ? " Then open it from your home screen and type the code shown under the desk's QR code: on an iPhone the installed companion starts apart from this tab." : "";
+  const says = "Then it opens like an app, from your home screen." + then;
+  if (offer && !installed()) {
+    if (!await ask({ title: "Install the companion", yes: "INSTALL", no: "NOT NOW", says }).answer) return false;
+    offer.prompt();
+    return (await offer.userChoice).outcome === "accepted";
+  }
+  await ask({ title: "Install the companion", yes: "OK", no: "NOT NOW", says: howToInstall() + " " + says }).answer;
+  return false;
+}
+
+// ---- the Assistant's conversation: kept while the companion is open, as on the desk; reading shortcuts only ----
+const talkLog = [];
+const talkSession = (() => { try { return crypto.randomUUID(); } catch { return "p" + Math.random().toString(36).slice(2); } })();
+const TALK_SHORTCUTS = ["how hot is the board", "how much space is left", "how much memory is left", "is the wifi working", "what's running", "show my files"];
+
+// ---- the pane: one app at a time, sliding in from the right ----
+const pane = document.getElementById("pane"), scrim = document.getElementById("pane-scrim"), body = document.getElementById("pane-body"), title = document.getElementById("pane-title");
+let open = null, back = null, teardown = null;
+function openApp(id) {
+  closeApp();
+  open = id;
+  title.textContent = APPS[id].name;
+  body.replaceChildren();
+  body.scrollTop = 0;
+  APPS[id].open();
+  pane.classList.add("open");
+  pane.setAttribute("aria-hidden", "false");
+  if (!history.state?.pane) history.pushState({ pane: 1 }, ""); // the phone's back gesture closes the pane, not the app
+}
+// a screen inside an app (an article, the WiFi, the trackpad) gets its own step in the history, added
+// on the tap that opens it: Chrome skips the steps a page adds without one, and back would leave the app
+function inside(leave) {
+  back = leave;
+  if (history.state?.pane === 1) history.pushState({ pane: 2 }, "");
+}
+function closeApp() {
+  if (teardown) { teardown(); teardown = null; }
+  open = back = null;
+  pane.classList.remove("open");
+  scrim.classList.remove("open");
+  pane.setAttribute("aria-hidden", "true");
+}
+// every way back goes through the history, so the arrow and the phone's gesture do the same thing
+addEventListener("popstate", () => {
+  if (!pane.classList.contains("open")) return;
+  if (back && history.state?.pane) back(); // one screen up; the app stays open
+  else closeApp();
+});
+document.getElementById("pane-back").onclick = () => history.state?.pane ? history.back() : back ? back() : closeApp();
+scrim.onclick = () => history.state?.pane ? history.go(-history.state.pane) : closeApp();
+
+const row = (icon, name, sub) => {
+  const r = el("div", "m-item");
+  r.append(el("span", "m-ic", icon), text("span", "m-nm", name));
+  if (sub) r.append(text("span", "sub", sub));
+  return r;
+};
+const note = t => text("div", "m-pad m-muted", t);
+
+// ---- the modules: an app in a file of its own, given the shell (Gab, 2026-11-01: "each companion app should be built
+// as modules or additional self contained code to extend companion capabilities"). A module exports a function that
+// takes the shell and returns an app { name, glyph, dock, open(), fresh() }; adding one is a line here, a line in
+// sw.js (kept offline) and, if it keeps things, a store in db.js. The other apps move out one at a time, later.
+const MODULES = { notes: notesApp, player: playerApp };
+function modules() {
+  const shell = {
+    el, text, toast, row, note, body, title, inside, top: () => { back = null; },
+    showing: id => open === id && !back, // open, on its first screen
+    opened: id => open === id, // open, on any of its screens
+    onLeave: fn => { teardown = fn; }, desk, sync, badges: () => badges(), online: () => wasOnline,
+  };
+  return Object.fromEntries(Object.entries(MODULES).map(([id, make]) => [id, make(shell)]));
+}
+
+// ---- the apps ----
+const APPS = {
+  reader: {
+    name: "Reader", glyph: I.reader,
+    async open() {
+      back = null;
+      title.textContent = "Reader";
+      const kept = (await all("articles")).sort((a, b) => String(b.savedAt).localeCompare(String(a.savedAt)));
+      if (open !== "reader" || back) return;
+      const list = el("div", "m-list");
+      for (const a of kept) {
+        const r = row(I.book, a.title || a.file, a.siteName || "");
+        r.onclick = () => APPS.reader.read(a);
+        list.append(r);
+      }
+      body.replaceChildren(kept.length ? list : note("Nothing here yet. Share a link to “desk” from any app; it comes back as an article when the desk is in reach."));
+    },
+    fresh() { if (!back) APPS.reader.open(); },
+    // one article: the front matter is the desk's (title, author, siteName, cover…), then markdown
+    read(a) {
+      inside(() => APPS.reader.open());
+      title.textContent = a.siteName || "Reader";
+      const md = a.text.replace(/^---\n[\s\S]*?\n---\n?/, ""), out = el("div", "reader-body");
+      const box = el("div", "", window.marked.parse(md, { gfm: true }));
+      box.querySelectorAll("script,style,iframe,object,embed,link,meta,form").forEach(e => e.remove()); // it came from the web
+      for (const e of box.querySelectorAll("*")) {
+        for (const at of [...e.attributes]) if (/^on/i.test(at.name) || (/^(href|src)$/.test(at.name) && /^\s*javascript:/i.test(at.value))) e.removeAttribute(at.name);
+        if (e.tagName === "A") Object.assign(e, { target: "_blank", rel: "noopener noreferrer" });
+        if (e.tagName === "IMG") Object.assign(e, { loading: "lazy", referrerPolicy: "no-referrer" });
+      }
+      out.append(text("h1", "", a.title || a.file), text("p", "m-muted", [a.author, a.published].filter(Boolean).join(" · ")));
+      if (a.cover && !md.includes(a.cover.split("?")[0])) out.append(Object.assign(el("img"), { src: a.cover, alt: "", referrerPolicy: "no-referrer" }));
+      out.append(...box.childNodes);
+      if (a.url) { const p = el("p"); p.append(Object.assign(text("a", "", "The page this was kept from"), { href: a.url, target: "_blank", rel: "noopener noreferrer" })); out.append(p); }
+      for (const p of out.querySelectorAll("p, li, blockquote, h2, h3")) p.style.margin = p.style.margin || "0 0 12px";
+      body.replaceChildren(out);
+      body.scrollTop = 0;
+    },
+  },
+  share: {
+    name: "Shared", glyph: I.share,
+    async open() {
+      const links = (await all("waiting")).sort((a, b) => b.at - a.at), files = (await all("files")).sort((a, b) => b.at - a.at);
+      if (open !== "share") return;
+      const list = el("div", "m-list");
+      for (const f of files) {
+        const r = row(I.file, f.name, f.why ? "not sent" : size(f.size) + " · waiting");
+        r.onclick = async () => { if (confirmRemove(r, f.id)) { await drop("files", f.id); badges(); APPS.share.open(); } };
+        list.append(r);
+        if (f.why) list.append(note(f.why + ". Tap the file twice to remove it."));
+      }
+      for (const w of links) {
+        const r = row(I.globe, w.title || w.url, w.why ? "not kept" : "waiting");
+        r.onclick = async () => { if (confirmRemove(r, w.url)) { await drop("waiting", w.url); badges(); APPS.share.open(); } };
+        list.append(r);
+        if (w.why) list.append(note(w.why + ". Tap the link twice to remove it."));
+      }
+      const go = Object.assign(text("button", "m-btn primary", "HAND OVER TO THE DESK"), { onclick: () => sync(true) });
+      const foot = el("div", "m-pad");
+      foot.append(go);
+      const waiting = [...links, ...files];
+      body.replaceChildren(...(waiting.length ? [list, ...(waiting.some(w => !w.why) ? [foot] : [])]
+        : [note("Nothing is waiting. Share a link or a file to “desk” from any app: a link comes back as an article, a file goes to the desk's inbox (a deck exported with its notes pages becomes a deck in Slides).")]));
+    },
+    fresh() { APPS.share.open(); },
+  },
+  // voice memos: recorded here, listened to, then kept for the desk (its inbox writes the text) or deleted
+  memos: {
+    name: "Memos", glyph: I.mic, dock: false, needs: () => !!navigator.mediaDevices && "MediaRecorder" in window,
+    async open() {
+      back = null;
+      title.textContent = "Memos";
+      const memos = (await all("memos")).sort((a, b) => b.at - a.at);
+      if (open !== "memos" || back) return;
+      teardown = () => { if (rec) stopMemo().then(() => toast("Memo saved on the phone", true)); }; // leaving keeps what was said
+      const top = el("div", "m-pad"), big = Object.assign(el("button"), { type: "button" }), dot = el("span");
+      big.setAttribute("aria-label", "record");
+      big.style.cssText = "display:block;margin:10px auto;width:96px;height:96px;border-radius:50%;border:2px solid var(--accent);background:transparent;padding:0;cursor:pointer";
+      const look = on => { dot.style.cssText = "display:block;margin:auto;background:var(--accent);transition:all .15s;" + (on ? "width:30px;height:30px;border-radius:6px" : "width:64px;height:64px;border-radius:50%"); };
+      big.append(dot);
+      const said = text("div", "m-muted", "Tap to record"), meter = el("div"), level = el("i");
+      said.style.textAlign = "center";
+      meter.style.cssText = "height:4px;margin:10px 20%;background:var(--hair);border-radius:2px;overflow:hidden";
+      level.style.cssText = "display:block;height:100%;background:var(--accent);transform:scaleX(0);transform-origin:left";
+      meter.append(level);
+      top.append(big, said, meter);
+      look(false);
+      big.onclick = async () => {
+        if (rec) { await stopMemo(); return APPS.memos.open(); }
+        try {
+          await startMemo((seconds, loud) => { said.textContent = "● " + mmss(seconds) + " — tap to stop"; level.style.transform = "scaleX(" + loud + ")"; });
+          look(true);
+          list.style.opacity = 0.4;
+        } catch (e) {
+          said.textContent = e.name === "NotAllowedError" ? "The microphone was refused. Allow it in the site's settings." : "The microphone: " + e.message;
+        }
+      };
+      const list = el("div", "m-list");
+      for (const m of memos) {
+        const r = row(I.mic, new Date(m.at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }),
+          mmss(m.seconds) + " · " + (m.keep ? "for the desk" : m.why ? "not taken" : "on the phone"));
+        r.onclick = () => { if (!rec) APPS.memos.listen(m); };
+        list.append(r);
+      }
+      const parts = [top, ...(memos.length ? [list] : [])];
+      if (memos.some(m => m.keep)) {
+        const foot = el("div", "m-pad");
+        foot.append(Object.assign(text("button", "m-btn primary", "SEND THE KEPT ONES NOW"), { onclick: () => sync(true) }));
+        parts.push(foot);
+      }
+      parts.push(note(memos.length ? "Tap a memo to listen, then keep it for the desk or delete it. Kept ones go to the desk's inbox when it is in reach; it writes their text into ~/Memos. Once there, they leave this phone."
+        : "Nothing recorded yet. What you keep goes to the desk's inbox, which writes it out as text."));
+      body.replaceChildren(...parts);
+    },
+    fresh() { if (!back && !rec) APPS.memos.open(); }, // never under a recording
+    // one memo: listen, then keep it for the desk or delete it (on the second tap)
+    listen(m) {
+      inside(() => APPS.memos.open());
+      title.textContent = "Memo";
+      // the player in the shell's look (symbios mobile's now-playing bar). The length is the one measured while
+      // recording: a browser's recording often doesn't say its own
+      const url = URL.createObjectURL(m.blob), audio = new Audio(url);
+      teardown = () => { audio.pause(); URL.revokeObjectURL(url); };
+      const player = el("div", "m-nowmeta"), hit = el("div"), seek = el("div", "m-seek"), fill = el("i"), ctrls = el("div", "m-nowctrls");
+      player.style.margin = "14px 0";
+      hit.style.cssText = "padding:14px 0;cursor:pointer;touch-action:none"; // a 4px bar, with room for a thumb
+      seek.append(fill);
+      hit.append(seek);
+      const pb = (label, act) => { const b = Object.assign(text("button", "m-pbtn", label), { type: "button", onclick: act }); b.style.cssText = "font-size:18px;padding:8px 12px"; return b; };
+      const skip = s => { audio.currentTime = Math.max(0, Math.min(m.seconds, audio.currentTime + s)); };
+      const play = pb(">", () => audio.paused ? audio.play() : audio.pause()), time = text("span", "m-time m-muted", "");
+      ctrls.append(pb("<<", () => skip(-10)), play, pb(">>", () => skip(10)), time);
+      player.append(hit, ctrls);
+      const draw = () => {
+        const t = Math.min(audio.currentTime, m.seconds);
+        fill.style.transform = "scaleX(" + (m.seconds ? t / m.seconds : 0) + ")";
+        time.textContent = mmss(t) + " / " + mmss(m.seconds);
+        play.textContent = audio.paused ? ">" : "||";
+      };
+      for (const e of ["timeupdate", "play", "pause", "ended", "seeked"]) audio.addEventListener(e, draw);
+      const to = e => { const r = seek.getBoundingClientRect(); audio.currentTime = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * m.seconds; draw(); };
+      hit.onpointerdown = e => { hit.setPointerCapture(e.pointerId); to(e); hit.onpointermove = to; };
+      hit.onpointerup = hit.onpointercancel = () => { hit.onpointermove = null; };
+      draw();
+      const when = text("div", "m-muted", new Date(m.at).toLocaleString() + " · " + mmss(m.seconds));
+      const keep = Object.assign(text("button", "m-btn" + (m.keep ? "" : " primary"), m.keep ? "DON'T SEND IT" : "KEEP — SEND TO THE DESK"), { type: "button" });
+      keep.onclick = async () => {
+        const kept = !m.keep;
+        await put("memos", { ...m, keep: kept, why: undefined });
+        badges();
+        if (kept) { toast("Kept for the desk", true); if (wasOnline) sync(false); }
+        history.back();
+      };
+      const del = Object.assign(text("button", "m-btn", "DELETE"), { type: "button" });
+      let armedDel = null;
+      del.onclick = async () => {
+        if (!armedDel) { del.textContent = "TAP AGAIN TO DELETE"; armedDel = setTimeout(() => { armedDel = null; del.textContent = "DELETE"; }, 3000); return; }
+        clearTimeout(armedDel);
+        await drop("memos", m.at);
+        badges();
+        history.back();
+      };
+      for (const b of [keep, del]) b.style.cssText = "display:block;width:100%;margin-top:10px";
+      const box = el("div", "m-pad");
+      box.append(when, player, keep, del);
+      if (m.why) box.append(note("The desk didn't take it: " + m.why + "."));
+      body.replaceChildren(box);
+    },
+  },
+  // the modules (MODULES, below): each a file of its own, on the shell's pane, toasts, desk and sync
+  ...modules(),
+  status: {
+    name: "Monitor", glyph: I.status,
+    open() {
+      const gauge = (id, label, spark) => `<div class="mon-gauge"><h4>${label}</h4><div class="mon-big" id="g-${id}">—</div><div class="mon-bar"><i id="g-${id}-b"></i></div>${spark ? `<div class="mon-spark" id="g-${id}-s"></div>` : `<small id="g-${id}-sub"></small>`}</div>`;
+      body.innerHTML = `<div class="mon"><div class="mon-grid">${gauge("cpu", "CPU LOAD", true)}${gauge("mem", "MEMORY")}${gauge("temp", "SOC TEMP")}${gauge("disk", "DISK")}</div>
+        <div class="mon-meta"><div class="m-kv"><span class="m-muted">name</span><b id="g-host">—</b></div><div class="m-kv"><span class="m-muted">uptime</span><b id="g-up">—</b></div></div>
+        <div class="mon-act"><h4>ACTIVITY</h4><div class="mon-tasks"></div></div>
+        <div class="mon-off m-muted" hidden>desk not reachable</div></div>`;
+      const $ = id => document.getElementById(id), gb = n => (n / 1073741824).toFixed(1), spark = $("g-cpu-s");
+      for (let i = 0; i < 30; i++) spark.append(el("i"));
+      const bar = (id, pct) => { $(id).style.transform = "scaleX(" + Math.max(0, Math.min(100, pct)) / 100 + ")"; };
+      const tick = async () => {
+        let s;
+        try { s = await desk("/api/status"); } catch { if (open === "status") body.querySelector(".mon-off").hidden = false; return; }
+        if (open !== "status") return;
+        body.querySelector(".mon-off").hidden = true;
+        const load = Math.round(100 * s.load[0] / s.cores), mem = Math.round(100 * s.memory.used / s.memory.total), disk = Math.round(100 * s.disk.used / s.disk.total);
+        $("g-cpu").textContent = load + "%"; bar("g-cpu-b", load);
+        spark.firstChild.remove();
+        spark.append(Object.assign(el("i"), { style: "transform:scaleY(" + Math.max(4, Math.min(100, load)) / 100 + ")" }));
+        $("g-mem").textContent = mem + "%"; bar("g-mem-b", mem); $("g-mem-sub").textContent = gb(s.memory.used) + " / " + gb(s.memory.total) + " GB";
+        $("g-temp").textContent = s.temp == null ? "—" : s.temp + "°"; $("g-temp").classList.toggle("hot", s.temp >= 75); bar("g-temp-b", s.temp == null ? 0 : (s.temp - 20) / 60 * 100);
+        $("g-disk").textContent = disk + "%"; bar("g-disk-b", disk); $("g-disk-sub").textContent = gb(s.disk.used) + " / " + gb(s.disk.total) + " GB";
+        const h = Math.floor(s.uptime / 3600);
+        $("g-host").textContent = s.host; $("g-up").textContent = (h >= 24 ? Math.floor(h / 24) + "d " : "") + (h % 24) + "h " + Math.floor(s.uptime % 3600 / 60) + "m";
+      };
+      // Activity: the desk's heavy work, as on the desk's own System window: a plain bar and the time left,
+      // "pending" while it waits its turn, "done" for a moment, then gone
+      const tasksEl = body.querySelector(".mon-tasks"), rows = new Map();
+      const left = s => s >= 90 ? Math.round(s / 60) + " min" : Math.max(1, Math.round(s)) + " s";
+      let soon = null;
+      this.activity = () => {
+        clearTimeout(soon);
+        const now = Date.now() / 1000 - deskSkew, seen = new Set();
+        for (const t of deskTasks) {
+          if (t.ended && now - t.ended > 3) continue;
+          seen.add(t.id);
+          let r = rows.get(t.id);
+          if (!r) { r = el("div", "mon-task"); r.innerHTML = `<span class="nm"></span><div class="mon-bar"><i></i></div><span class="tm m-muted"></span>`; rows.set(t.id, r); tasksEl.append(r); }
+          const run = t.state === "running", gone = run && t.expect ? now - t.since : 0;
+          const pct = t.ended ? 100 : run && t.expect ? Math.min(99, gone / t.expect * 100) : 0;
+          r.classList.toggle("pending", t.state === "pending");
+          r.querySelector(".nm").textContent = t.name;
+          r.querySelector("i").style.transform = "scaleX(" + pct / 100 + ")";
+          r.querySelector(".tm").textContent = t.state === "done" ? "done" : t.state === "failed" ? "failed" : !run ? "pending"
+            : !t.expect ? "running" : t.expect - gone > 1 ? left(t.expect - gone) : "almost";
+        }
+        for (const [id, r] of rows) if (!seen.has(id)) { r.remove(); rows.delete(id); }
+        tasksEl.dataset.empty = rows.size ? "" : "Nothing running.";
+        if (rows.size) soon = setTimeout(this.activity, 1000);
+      };
+      this.activity();
+      tick();
+      const timer = setInterval(tick, 4000);
+      teardown = () => { clearInterval(timer); clearTimeout(soon); this.activity = null; };
+    },
+  },
+  // the desk's Assistant from the phone (Gab, 2026-10-23): TermNL on the board, over the WiFi, as the desk's own
+  // window has it. What happens on the desk's screen (music, a file to open, the sound) isn't relayed yet
+  assistant: {
+    name: "Assistant", glyph: I.talk, dock: false,
+    open() {
+      const screen = el("div", "m-talk"), log = Object.assign(el("div", "m-pad talk-log"), { ariaLive: "polite" });
+      const chips = el("div", "m-row talk-chips"), form = el("form", "m-row talk-form");
+      const input = Object.assign(el("input", "m-input"), { placeholder: "Say something: how hot is the board", autocomplete: "off", ariaLabel: "Say something" });
+      form.append(input, text("button", "m-btn", "Send"));
+      for (const s of TALK_SHORTCUTS) { const b = text("button", "m-btn", s); b.type = "button"; b.onclick = () => this.say(s); chips.append(b); }
+      log.append(...talkLog);
+      screen.append(log, chips, form);
+      body.replaceChildren(screen);
+      form.onsubmit = e => { e.preventDefault(); const v = input.value.trim(); input.value = ""; if (v) this.say(v); };
+      this.log = log;
+      log.scrollTop = log.scrollHeight;
+    },
+    add(...nodes) {
+      talkLog.push(...nodes);
+      if (open !== "assistant") return;
+      this.log.append(...nodes);
+      this.log.scrollTop = this.log.scrollHeight;
+    },
+    async say(said) {
+      for (const b of talkLog.flatMap(n => [...n.querySelectorAll("button.chip")])) b.disabled = true; // that question is over
+      this.add(text("div", "talk-me", said));
+      let r;
+      try { r = await desk("/api/say", { text: said, session: talkSession }, 20000); }
+      catch (e) { return this.add(text("div", "talk-it", e.away ? "The desk is out of reach: the Assistant answers over the desk's WiFi." : "The desk couldn't answer: " + e.message + ".")); }
+      const it = text("div", "talk-it", r.say);
+      if (r.screen) it.append(text("div", "m-muted talk-note", "That happens on the desk's own screen; from the phone it doesn't reach it yet."));
+      if (r.table) {
+        const tb = el("table");
+        const head = tb.createTHead().insertRow();
+        for (const c of r.table.columns) head.append(text("th", "", c));
+        // a row's mark (lock: a Wi-Fi network that asks for a password) before its first cell (Gab, 25 Oct: "Simple shape and one color")
+        r.table.rows.forEach((row, i) => {
+          const tr = tb.insertRow();
+          for (const v of row) tr.insertCell().textContent = v;
+          if ((r.table.marks || [])[i] === "lock") { const m = el("span", "talk-mark"); m.innerHTML = I.lock; tr.cells[0].prepend(m); }
+        });
+        it.append(tb);
+      }
+      for (const d of r.documents || []) {
+        const doc = el("div", "m-item talk-doc");
+        doc.append(text("span", "m-nm", d.title), text("span", "sub", d.kind));
+        doc.onclick = async () => { // an article the phone keeps opens in its Reader; the others live on the desk
+          const a = d.kind === "article" && (await all("articles")).find(x => "Articles/" + x.file === d.path);
+          if (a) { openApp("reader"); APPS.reader.read(a); } else toast(d.kind === "memo" ? "Memos are read on the desk" : "Not on this phone yet: it comes with the next sync");
+        };
+        it.append(doc);
+      }
+      if (r.chips?.length) {
+        const row = el("div", "m-row talk-answers");
+        for (const c of r.chips) { const b = text("button", "m-btn chip", c); b.type = "button"; b.onclick = () => this.say(c); row.append(b); }
+        it.append(row);
+      }
+      const shown = r.screen || r.show;
+      const how = r.screen ? "desk's screen" : r.ran === "read" ? "ran" : r.ran || (r.outcome === "approve" ? "would run" : "");
+      this.add(it, ...(shown ? [text("div", "m-muted talk-cmd", "$ " + shown + (how ? "  · " + how : ""))] : []));
+    },
+  },
+  // the phone as the desk's trackpad, over Bluetooth: only where the browser has Bluetooth
+  remote: {
+    name: "Remote", glyph: I.trackpad, needs: () => !!navigator.bluetooth, dock: false, // five would not fit a narrow phone's dock
+    open() { steerDesk(); },
+  },
+  // the phone as the clicker of a deck on the desk: over Bluetooth where the browser has it, else over the WiFi
+  slides: {
+    name: "Slides", glyph: I.slides, dock: false,
+    // straight to the remote of the deck the desk shows (as last heard, or asked over the WiFi); the list otherwise
+    async open() {
+      back = null;
+      slidesTab = "slides";
+      let on = shown?.d;
+      if (!on) try { on = (await desk("/api/slides", null, 2500)).now.deck; } catch { /* not over the WiFi: the list */ }
+      if (open !== "slides") return;
+      const d = on && (await all("decks")).find(x => x.name === on);
+      if (open !== "slides") return;
+      slidesScreen(d ? s => present(d, s) : deckList);
+    },
+    fresh() { if (!back && slidesTab === "slides" && !teardown) slidesScreen(deckList); }, // the list, after a sync
+  },
+  settings: {
+    name: "Settings", glyph: I.settings,
+    async open() {
+      back = null; // back from Settings goes home, also after the WiFi or the trackpad set it
+      const at = await setting("desk"), synced = await setting("synced");
+      if (open !== "settings") return;
+      const where = el("div", "m-pad"), line = el("div", "m-row");
+      const input = Object.assign(el("input", "m-input"), { placeholder: "desk.lan or 192.168.1.20", value: at || "", autocapitalize: "off", spellcheck: false });
+      input.setAttribute("aria-label", "The desk's address");
+      const save = Object.assign(text("button", "m-btn", "SAVE"), { onclick: async () => {
+        await put("settings", input.value.trim().replace(/^https?:\/\//, "").replace(/\/.*$/, ""), "desk");
+        toast("Saved", true); ping(); APPS.settings.open();
+      } });
+      line.append(input, save);
+      where.append(text("div", "m-muted", "WHERE THE DESK IS"), el("div", "", "&nbsp;"), line);
+      const list = el("div", "m-list");
+      const kv = (k, v) => { const r = el("div", "m-kv"); r.append(text("span", "m-muted", k), text("b", "", v)); return r; };
+      const seek = row(I.globe, "Find the desk on this network", "tap");
+      seek.onclick = async () => {
+        if (seek.busy) return;
+        seek.busy = true;
+        const sub = seek.querySelector(".sub"), found = await hunt(t => { sub.textContent = t; });
+        seek.busy = false;
+        if (!found) { sub.textContent = "not found"; return toast(navigator.bluetooth ? "No desk answered on this network. Try asking it over Bluetooth" : "No desk answered on this network", false); }
+        await put("settings", found, "desk");
+        toast("Found the desk at " + found, true); ping(); if (open === "settings") APPS.settings.open();
+      };
+      list.append(seek);
+      if (navigator.bluetooth) {
+        const ask = row(I.share, "Ask the desk over Bluetooth", "tap");
+        ask.onclick = async () => {
+          if (ask.busy) return;
+          ask.busy = true;
+          const sub = ask.querySelector(".sub");
+          try {
+            const it = await askBluetooth(t => { sub.textContent = t; });
+            if (!it.address) { sub.textContent = "on no WiFi"; return toast("The desk is on no WiFi. Plug it into the phone to give it one", false); }
+            await put("settings", it.address, "desk");
+            sub.textContent = it.address;
+            const reach = await knock([it.address], 4000);
+            toast(`The desk is at ${it.address} on “${it.wifi}”` + (reach ? "" : ", but this phone can't reach it there. Is the phone on the same WiFi?"), !!reach);
+            ping(); if (open === "settings") APPS.settings.open();
+          } catch (e) {
+            sub.textContent = "tap";
+            if (e.name !== "NotFoundError") toast("Bluetooth: " + e.message, false); // NotFoundError: the list was closed
+          } finally { ask.busy = false; }
+        };
+        list.append(ask);
+        const give = row(I.settings, "Give the desk a WiFi over Bluetooth", "test");
+        give.onclick = () => { inside(() => APPS.settings.open()); giveWifi(); };
+        list.append(give);
+      }
+      list.append(kv("owner", await ownerSays()));
+      if (hello?.claimed === false && trust.usable) { const c = row(I.lock, "Claim this desk", cable ? "over the cable" : "with the code on its screen"); c.onclick = () => askClaim(c); list.append(c); }
+      const mine = await trust.owned();
+      if (hello?.claimed && hello.board === mine?.boardId && unknownTo !== hello.board) { const w = row(I.lock, "Secret word", hello.word ? "set · change" : "not set · set it"); w.onclick = () => askWord(hello.word); list.append(w); }
+      else if (hello?.claimed && hello.word && trust.usable) { const t = row(I.lock, "Take this desk back", "over the cable"); t.onclick = () => askTakeBack(t); list.append(t); }
+      if (hello?.claimed && hello.board === (await trust.owned())?.boardId) list.append(...await openScreens());
+      list.append(kv("last synced", synced ? new Date(synced).toLocaleString() : "never"));
+      const now = row(I.share, "Sync with the desk now"); now.onclick = () => sync(true); list.append(now);
+      if (at || cable) { const go = row(I.globe, "Open the desk itself"); go.onclick = () => window.open("http://" + (cable ? CABLE : at) + "/", "_blank", "noopener"); list.append(go); }
+      const standalone = installed();
+      list.append(kv("on this phone", standalone ? "installed" : offer ? "ready to install" : "in a browser tab"));
+      if (!standalone) { const ins = row(I.settings, "Install on this phone"); ins.onclick = async () => { await installSheet(false); if (open === "settings") APPS.settings.open(); }; list.append(ins); }
+      const look = el("div", "m-pad");
+      look.append(text("div", "m-muted", "LOOK"), themePicker(() => APPS.settings.open())); // the companion's colours (utils/theme.js)
+      body.replaceChildren(where, list, look, note(at ? "The address changes with the network. At home it is the desk's name on the router; elsewhere, the address its WiFi screen shows." : "Type the address the desk has on this network."));
+    },
+    fresh() { if (!back && !body.contains(document.activeElement)) APPS.settings.open(); }, // not over the WiFi or the trackpad, nor under a half-typed address
+  },
+};
+
+// the screens let in now (Settings): a tap disconnects one, let in by mistake (Gab, 2026-10-27: "it will disconnect
+// from device you may have approved by mistake"); it is back on its lock screen within a few seconds
+async function openScreens() {
+  const got = (await desk("/api/screen/open").catch(() => null))?.screens;
+  if (!got) return [];
+  const since = t => new Date(t * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const close = (id, what) => async () => {
+    try { await desk("/api/screen/close", { id }); toast(what + " disconnected", true); }
+    catch (e) { toast("Disconnecting: " + e.message, false); }
+    if (open === "settings") APPS.settings.open();
+  };
+  const rows = [text("div", "m-pad", got.length ? "SCREENS OPEN NOW · tap one to disconnect it" : "SCREENS OPEN NOW · none")];
+  for (const w of got) {
+    const r = row(I.lock, whereFrom(w), "since " + since(w.since) + " · disconnect");
+    r.onclick = close(w.id, "The screen");
+    rows.push(r);
+  }
+  if (got.length > 1) { const all = row(I.lock, "Disconnect every screen", "tap"); all.onclick = close("all", "Every screen"); rows.push(all); }
+  return rows;
+}
+
+// ---- the claim: the first phone over the cable becomes the desk's owner (trust.js; the desk's SECURE-LINK.md).
+// The claim makes the keys, and a sealed hello proves both sides agree; then the desk opens only to this phone ----
+let hello = null; // what the desk said last at /api/hello: { claimed, board, … }, or null when out of reach
+async function ownerSays() {
+  const mine = await trust.owned(), day = t => new Date(t).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  if (mine && hello && hello.board === unknownTo) return "the desk doesn't know this phone any more";
+  if (mine && (!hello || hello.board === mine.boardId)) return "yours since " + day(mine.since) + (hello ? "" : " (out of reach)");
+  if (hello?.claimed) return "claimed by another phone";
+  return hello ? "not claimed" : "unknown (out of reach)";
+}
+// the home's line about the claim: a desk with no owner, or, on the cable, a desk another phone owns that has a secret
+// word (a lost phone's: this one may take it back). Over the WiFi, someone else's desk stays out of the way
+async function claimCard() {
+  const card = document.getElementById("claim"), mine = await trust.owned();
+  const state = !trust.usable || !hello ? "" : hello.claimed === false ? "free"
+    : cable && hello.word && (hello.board !== mine?.boardId || unknownTo === hello.board) ? "taken" : "";
+  card.hidden = !state;
+  if (card.dataset.state === state) return;
+  card.dataset.state = state;
+  const c = state === "free" ? row(I.lock, "This desk has no owner yet", "claim it") : row(I.lock, "This desk has another owner", "yours? take it back");
+  c.onclick = () => state === "free" ? askClaim(c) : askTakeBack(c);
+  card.replaceChildren(...(state ? [c] : []));
+}
+function askTakeBack(r) {
+  ask({ title: "Take this desk back", yes: "TAKE IT BACK", no: "CANCEL",
+    says: "For a desk that was yours on a phone you lost or reset. Type its secret word: this phone becomes its owner, and the old phone is shut out. Over the USB cable only.",
+    field: { placeholder: "the secret word", check: v => v ? "" : "Type the secret word" } })
+    .answer.then(word => word && claimDesk(r, word));
+}
+// the secret word (the desk's SECURE-LINK.md, step 6): offered right after the claim, set or changed in Settings
+function askWord(change) {
+  ask({ title: change ? "Change the secret word" : "A secret word for this desk", yes: "SET", no: change ? "CANCEL" : "LATER",
+    says: "If this phone is lost, a new phone plugged into the desk by cable takes it back with this word. At least 8 characters: a few words are easy to remember. The desk keeps no copy it could show you, so write it down somewhere safe." + (change ? "" : " You can also set it later, in Settings."),
+    field: { placeholder: "the secret word", twice: true, check: v => v.length < 8 ? "At least 8 characters" : "" } })
+    .answer.then(async word => {
+      if (!word) return;
+      try { await desk("/api/trust/word", { word }); toast("Secret word set", true); }
+      catch (e) { toast("The secret word: " + e.message, false); }
+      await ping();
+      if (open === "settings") APPS.settings.open();
+    });
+}
+// the code a desk's QR code brought (#claim=…&desk=…&board=…), kept a few minutes: { code, desk, board, until }
+async function broughtCode() {
+  const got = await setting("claim-code");
+  return got && got.until > Date.now() ? got : null;
+}
+const codeShown = c => c.slice(0, 4) + "-" + c.slice(4);
+const YOURS = "It becomes yours: from then on it opens only for this phone, and every screen showing it asks this phone first.";
+async function askClaim(r) {
+  const brought = await broughtCode();
+  if (brought) return ask({ title: "Claim this desk", code: codeShown(brought.code), yes: "CLAIM", no: "CANCEL",
+    says: YOURS + " The code is the one under the QR code on the desk's screen." })
+    .answer.then(yes => yes && claimDesk(r, null, brought.code, brought.desk, brought.board));
+  if (cable) return ask({ title: "Claim this desk", yes: "CLAIM", no: "CANCEL",
+    says: YOURS + " The claim goes over the USB cable, with the phone's WiFi and mobile data off." })
+    .answer.then(yes => yes && claimDesk(r));
+  ask({ title: "Claim this desk", yes: "CLAIM", no: "CANCEL",
+    says: YOURS + " Type the code shown under the QR code on the desk's screen (the board's own, or a computer on its USB cable).",
+    field: { placeholder: "the code, as ABCD-EFGH", type: "text", check: v => v.replace(/[^a-z0-9]/gi, "").length === 8 ? "" : "8 letters and digits" } })
+    .answer.then(async typed => typed && claimDesk(r, null, typed, cable ? CABLE : await setting("desk")));
+}
+// code, where: the code a near screen showed, and the desk's address on the WiFi; without them, over the cable
+// board: the desk's key id the QR code brought, checked against the desk that answers (trust.claim)
+async function claimDesk(r, word, code, where, board) {
+  r ||= document.querySelector("#claim > *") || el("div"); // from the QR link, before the home's line is drawn
+  if (r.busy) return;
+  // without a code always over the cable, whatever address the desk was found at: a phone plugged in with its WiFi on
+  // still talks to the desk over the WiFi, and the desk refuses a claim that comes that way without the code
+  const at = code ? where : CABLE, sub = r.querySelector(".sub") || {}, was = sub.textContent;
+  let ok = false;
+  r.busy = true;
+  sub.textContent = "claiming…";
+  try {
+    if (code && !at) throw new Error("this phone doesn't know where the desk is yet: find it in Settings first");
+    if (!await knock([at], code ? 5000 : 3000)) throw new Error(code ? "the desk doesn't answer at " + at + ". Is this phone on the same WiFi as the desk?"
+      : "the desk isn't on the cable. Plug the phone in, turn its WiFi and mobile data off, then claim again");
+    await trust.claim(at, navigator.userAgentData?.platform || "phone", word, code && code.toUpperCase().replace(/[^A-Z0-9]/g, ""), code ? board : null);
+    if (code) { await drop("settings", "claim-code"); await put("settings", at, "desk"); }
+    sub.textContent = "checking…";
+    const s = await trust.session(at), said = JSON.parse(new TextDecoder().decode(await s.send("POST", "/api/trust/ping")));
+    if (!said.pong) throw new Error("the desk didn't answer the check");
+    toast(word ? "This desk is yours again" : "This desk is yours", true);
+    ok = true;
+    unknownTo = null;
+  } catch (e) {
+    sub.textContent = was;
+    if (e.message === "wrong code") await drop("settings", "claim-code"); // a new code is needed: scan the desk's QR code again
+    toast((word ? "Taking it back: " : "The claim: ") + (e.message === "wrong word" ? "that isn't its secret word"
+      : e.message === "wrong code" ? "that isn't the code on the desk's screen (it changes every few minutes): scan it again" : e.message), false);
+  } finally { r.busy = false; }
+  await ping();
+  if (open === "settings") APPS.settings.open();
+  if (ok && !word) askWord(false);
+}
+
+// ---- the ask sheet: one question at a time, rising from the bottom above everything (symbios' sheet), its words in
+// the text colour (Gab, 2026-10-27: "the text is hard to read … shall we think of having a … reusable component …
+// it could also be used for pairing or claiming"). ask() gives { answer, close }: answer is true (yes), false (no), or
+// null (the sheet was dismissed, or closed because the question went away). With a field (the secret word), yes gives
+// what was typed: field = { placeholder, twice (typed twice, to catch a slip), check(value) → why it won't do, or "" } ----
+const sheet = document.getElementById("ask"), sheetScrim = document.getElementById("ask-scrim");
+let asked = Promise.resolve();
+function ask({ title, code, says, yes, no, field }) {
+  let done, end = null, gone = false;
+  const answer = new Promise(r => { done = r; });
+  asked = asked.then(() => gone ? null : new Promise(next => {
+    end = a => {
+      sheet.classList.remove("open"); sheetScrim.classList.remove("open"); sheet.setAttribute("aria-hidden", "true");
+      end = null; done(a); setTimeout(next, 260); // the next question after this one has slid away
+    };
+    const inputs = field ? [field.placeholder, ...(field.twice ? ["the same again"] : [])].map(placeholder =>
+      Object.assign(el("input", "m-input ask-field"), { type: field.type || "password", placeholder, autocomplete: "off", autocapitalize: "off", spellcheck: false })) : [];
+    const fail = text("div", "ask-fail", "");
+    const typed = () => {
+      const v = inputs[0].value, why = inputs[1] && inputs[1].value !== v ? "The two don't match" : field.check?.(v) || "";
+      if (why) fail.textContent = why;
+      else end?.(v);
+    };
+    inputs.forEach((input, i) => { input.setAttribute("aria-label", input.placeholder); input.onkeydown = e => { if (e.key === "Enter") i + 1 < inputs.length ? inputs[i + 1].focus() : typed(); }; });
+    const btn = (label, primary, a) => Object.assign(text("button", "m-btn" + (primary ? " primary" : ""), label), { type: "button", onclick: () => a && field ? typed() : end?.(a) });
+    const btns = el("div", "ask-btns");
+    btns.append(btn(no, false, false), btn(yes, true, true));
+    sheet.replaceChildren(el("div", "pane-grab"), text("div", "ask-title", title), ...(code ? [text("div", "ask-code", code)] : []), text("div", "ask-says", says), ...inputs, fail, btns);
+    if (inputs.length) setTimeout(() => inputs[0].focus(), 280);
+    sheetScrim.onclick = () => end?.(null);
+    sheet.classList.add("open"); sheetScrim.classList.add("open"); sheet.setAttribute("aria-hidden", "false");
+  }));
+  return { answer, close() { gone = true; end ? end(null) : done(null); } };
+}
+
+// ---- screens asking to open the desk (its SECURE-LINK.md, step 5): the HDMI kiosk or a laptop shows a code on a lock
+// screen; the phone asks the same code in the ask sheet, with Allow and Refuse, as soon as it sees it (each time it
+// reaches the desk: every 15 s, on opening). Dismissed, the screen stays as a line on the home; a tap asks again ----
+const WHERE_FROM = { hdmi: "the board's HDMI screen", cable: "a computer on the USB cable", wifi: "a computer on the WiFi" };
+const whereFrom = w => WHERE_FROM[w.kind] + (w.kind === "wifi" ? " (" + w.ip + ")" : "");
+const asking = new Map(); // id → the ask sheet's handle, for each screen asked about
+function askScreen(w) {
+  const q = ask({ title: "A screen wants to open the desk", code: w.code, yes: "ALLOW", no: "REFUSE",
+    says: "From " + whereFrom(w) + ". Allow it only if this is the code on that screen." });
+  asking.set(w.id, q);
+  q.answer.then(async allow => {
+    if (allow === null) return;
+    try { await desk("/api/screen/answer", { id: w.id, allow }); toast(allow ? "Screen allowed" : "Screen refused", allow); }
+    catch (e) { toast("The answer: " + e.message, false); }
+    screensCard();
+  });
+}
+// ---- releasing the desk (the desk's Settings, This board; Gab, 24 Nov: "unclaim a board from plugging the board in a
+// computer, unlocking it via the phone ... and then release it from there"): a screen near the desk asks, this phone
+// confirms. Released, the desk is no longer this phone's; its files stay, and its QR code claims it again ----
+const releasing = new Map(); // id → the ask sheet's handle
+function askRelease(w) {
+  const q = ask({ title: "Release this desk?", yes: "RELEASE", no: "CANCEL",
+    says: "Asked from " + whereFrom(w) + ". This phone will no longer own it; its files stay on it, and its QR code claims it again. Release it only if you asked on that screen." });
+  releasing.set(w.id, q);
+  q.answer.then(async release => {
+    if (release === null) return;
+    try {
+      const got = await desk("/api/trust/release/answer", { id: w.id, release });
+      if (!got.done) toast("That release was no longer asked", false);
+      else if (got.released) { await drop("settings", "owner"); toast("The desk is released", true); }
+      else toast("Release refused", true);
+    } catch (e) { toast("The answer: " + e.message, false); }
+    releasing.delete(w.id);
+    await ping();
+    if (open === "settings") APPS.settings.open();
+  });
+}
+async function releasesAsked(mine) {
+  const asked = mine ? (await desk("/api/trust/release/pending").catch(() => ({}))).releases || [] : [];
+  for (const [id, q] of releasing) if (!asked.some(w => w.id === id)) { q.close(); releasing.delete(id); } // answered elsewhere, or ran out
+  for (const w of asked) if (!releasing.has(w.id)) askRelease(w);
+}
+
+async function screensCard() {
+  const box = document.getElementById("screens");
+  let waiting = [];
+  const mine = hello?.claimed && hello.board === (await trust.owned())?.boardId;
+  if (mine) waiting = (await desk("/api/screen/pending").catch(() => ({}))).screens || [];
+  releasesAsked(mine);
+  for (const [id, q] of asking) if (!waiting.some(w => w.id === id)) { q.close(); asking.delete(id); } // answered, or the code ran out
+  for (const w of waiting) if (!asking.has(w.id)) askScreen(w);
+  box.hidden = !waiting.length;
+  box.replaceChildren(...waiting.map(w => {
+    const r = row(I.lock, "A screen wants to open the desk", "code " + w.code);
+    r.onclick = () => { asking.get(w.id)?.close(); askScreen(w); };
+    return r;
+  }));
+}
+
+// a link is removed on the second tap, so a slip of the thumb doesn't lose it
+let armed = null;
+// the WiFi to give the desk: a name, a password, and what the desk says as it goes
+function giveWifi() {
+  const form = el("div", "m-pad"), field = (placeholder, type) => {
+    const i = Object.assign(el("input", "m-input"), { placeholder, type, autocapitalize: "off", spellcheck: false });
+    i.style.cssText = "display:block;width:100%;margin-bottom:8px";
+    return i;
+  };
+  const ssid = field("network name", "text"), password = field("password (none for an open network)", "password");
+  const send = Object.assign(text("button", "m-btn primary", "SEND OVER BLUETOOTH"), { type: "button" });
+  const said = text("div", "m-muted", "The desk joins it while the phone stays on its own network. A wrong password puts back what the desk knew before.");
+  said.style.marginTop = "12px";
+  send.onclick = async () => {
+    if (!ssid.value.trim()) return ssid.focus();
+    send.disabled = true;
+    try {
+      const it = await joinBluetooth(ssid.value.trim(), password.value, t => { said.textContent = t; });
+      if (it.error) { said.textContent = it.error; toast("The desk did not join “" + ssid.value.trim() + "”", false); }
+      else if (it.joined) {
+        await put("settings", it.ip, "desk");
+        said.textContent = `The desk is on “${it.ssid}” at ${it.ip}. Saved as its address.`;
+        toast("The desk joined “" + it.ssid + "”", true); ping();
+      } else said.textContent = `The desk knows “${ssid.value.trim()}” now, but stays on “${it.ssid}”, which is also in range. It moves when that one is gone.`;
+    } catch (e) {
+      said.textContent = e.name === "NotFoundError" ? "No desk picked." : "Bluetooth: " + e.message;
+    } finally { send.disabled = false; }
+  };
+  form.append(text("div", "m-muted", "GIVE THE DESK A WIFI"), el("div", "", "&nbsp;"), ssid, password, send, said);
+  body.replaceChildren(form);
+  ssid.focus();
+}
+
+// the phone as a trackpad for the desk on an HDMI screen, over Bluetooth (desk-bluetooth's "steer"):
+// drag moves, a quick tap clicks, two fingers scroll. A move is sent without an answer; while one is
+// on its way the next ones add up, so the phone sends as fast as the link takes and no faster. A
+// click keeps its place among the moves. (Dragging a window from here: to do, see desk's TODO.md.)
+// EXPERIMENT: the desk takes this from any phone near it for now, as the WiFi.
+const BT_STEER = "d35c0004-5e5a-4d3e-9b1f-6c0de5c0de01";
+// the desk picked for the trackpad stays picked while the companion runs: back on the Remote, the phone
+// joins it again by itself, with no Bluetooth list (Android drops the link when the companion is left)
+let device = null, steer = null, steerSeal = null;
+function steerDesk(slot) {
+  const said = text("div", "m-muted", "Tap Connect and pick the desk. Its screen shows the pointer.");
+  const pace = text("div", "m-muted", ""); // how many sends a second the link takes: the lag, felt
+  const stop = () => { device?.gatt.disconnect(); steer = null; };
+  const pad = trackpad(t => bleWrite(steer, steerSeal, t), () => !!steer,
+    e => { said.textContent = "Bluetooth: " + e.message; stop(); go.disabled = false; });
+  const rate = setInterval(() => { pace.textContent = steer ? pad.rate() + " sends a second" : ""; }, 1000);
+  const join = async () => {
+    go.disabled = true;
+    said.textContent = "connecting to " + (device.name || "the desk");
+    device.ongattserverdisconnected = () => { steer = null; go.disabled = false; said.textContent = "Disconnected. Tap Connect again."; }; // this screen's, not a closed one's
+    if (!steer || !device.gatt.connected) {
+      const service = await (await device.gatt.connect()).getPrimaryService(BT_SERVICE);
+      steerSeal = await bleSealer(service); // a new session on each connection
+      steer = await service.getCharacteristic(BT_STEER);
+    }
+    said.textContent = "Connected to " + (device.name || "the desk") + ". Drag to move, tap to click, two fingers to scroll.";
+  };
+  const rejoin = () => { if (device && !document.hidden) join().catch(() => { stop(); go.disabled = false; said.textContent = "The desk did not answer. Tap Connect."; }); };
+  document.addEventListener("visibilitychange", rejoin);
+  teardown = () => { clearInterval(rate); document.removeEventListener("visibilitychange", rejoin); };
+  const go = Object.assign(text("button", "m-btn primary", "CONNECT"), { type: "button" });
+  go.onclick = async () => {
+    go.disabled = true;
+    try {
+      if (device) try { return await join(); } catch { // the desk picked before, if it still answers; if not, the
+        stop(); device = null; go.disabled = false;     // list on the next tap (this one may be too old by now to open it)
+        return void (said.textContent = "The desk did not answer. Tap Connect to pick it again.");
+      }
+      const picked = await navigator.bluetooth.requestDevice({ filters: [{ services: [BT_SERVICE] }] });
+      if (picked !== device) { stop(); device = picked; }
+      await join();
+    } catch (e) {
+      said.textContent = e.name === "NotFoundError" ? "No desk picked." : "Bluetooth: " + e.message;
+      stop(); go.disabled = false;
+    }
+  };
+  if (slot) slot.replaceChildren(go, pad.box, said, pace);
+  else { const form = el("div", "m-pad"); form.append(go, pad.box, said, pace); body.replaceChildren(form); }
+  rejoin();
+}
+
+// The pad itself, for the Remote and for the Slides remote: write sends lines of text over the link,
+// ready says whether there is one, fail is told when a send fails. Answers { box, rate }.
+function trackpad(write, ready, fail, height = "52vh") {
+  let busy = false, dx = 0, dy = 0, wheel = 0, lines = [], sent = 0;
+  const pad = el("div");
+  pad.style.cssText = `height:${height};margin:12px 0;border:1px solid var(--muted,#555);border-radius:12px;touch-action:none`;
+  const buttons = el("div", "m-row"), left = text("button", "m-btn", "LEFT"), right = text("button", "m-btn", "RIGHT");
+  left.style.flex = right.style.flex = "1";
+  buttons.append(left, right);
+  const pump = async () => {
+    if (busy || !ready()) return;
+    busy = true;
+    try {
+      while (dx || dy || wheel || lines.length) {
+        const out = lines.splice(0);
+        if (dx || dy) out.push(`m ${dx} ${dy}`);
+        if (wheel) out.push(`s ${wheel}`);
+        dx = dy = wheel = 0;
+        await write(out.join("\n"));
+        sent++;
+      }
+    } catch (e) { fail(e); }
+    finally { busy = false; }
+  };
+  // screen pixels for one pixel of the pad; quicker strokes go further. 1.7 felt right at 1080p; the
+  // kiosk is at 720p now, where a pixel is 1.5 times more of the screen
+  const SPEED = 1.15;
+  // a click goes after the moves made before it
+  const press = line => { if (dx || dy) { lines.push(`m ${dx} ${dy}`); dx = dy = 0; } lines.push(line); pump(); };
+  let last = null, travel = 0, at = 0, two = false, rest = 0;
+  const point = e => ({ x: e.touches[0].clientX, y: e.touches[0].clientY });
+  pad.addEventListener("touchstart", e => {
+    e.preventDefault();
+    if (e.touches.length > 1) two = true;
+    if (e.touches.length === 1) { two = false; travel = 0; at = Date.now(); }
+    last = point(e);
+  }, { passive: false });
+  pad.addEventListener("touchmove", e => {
+    e.preventDefault();
+    if (!last) return;
+    const p = point(e), mx = p.x - last.x, my = p.y - last.y;
+    last = p;
+    travel += Math.abs(mx) + Math.abs(my);
+    if (e.touches.length > 1) {
+      rest += my;
+      const notches = Math.trunc(rest / 12); // a wheel notch every 12 pixels; the content follows the fingers
+      if (notches) { wheel += notches; rest -= notches * 12; }
+    } else {
+      const k = SPEED * (1 + Math.min(1.5, Math.hypot(mx, my) / 20));
+      dx += Math.round(mx * k); dy += Math.round(my * k);
+    }
+    pump();
+  }, { passive: false });
+  pad.addEventListener("touchend", e => {
+    e.preventDefault();
+    if (e.touches.length) { last = point(e); return; }
+    if (!two && travel < 10 && Date.now() - at < 250) press("c l");
+    last = null;
+  }, { passive: false });
+  left.onclick = () => press("c l");
+  right.onclick = () => press("c r");
+  const box = el("div");
+  box.append(pad, buttons);
+  return { box, rate: () => { const n = sent; sent = 0; return n; } };
+}
+
+// One deck, presented: which slide shows is the desk's (it keeps it for every screen); the phone sends
+// words ("next", "prev", "black", "full", "end", "open <deck>") and shows what the desk says back: the slide's notes
+// and the next one's picture. Over Bluetooth the words ride on the trackpad's value ("p next") and the
+// desk tells each change on its own value (slide); without Bluetooth, the same over the WiFi.
+const BT_SLIDE = "d35c0005-5e5a-4d3e-9b1f-6c0de5c0de01";
+let shown = null; // the slide on show as this phone last heard it ({d, i, n, b, f}): Slides opens on its deck
+let talk = null;  // { deck, at }: when the talk on show began, for the clock, kept across visits to this screen
+function present(deck, slot) {
+  let now = null, ble = null, queue = Promise.resolve(), gone = false, seq = -1;
+  const top = el("div", "m-row"), where = text("div", "m-muted", ""), clock = text("div", "m-muted", "");
+  where.style.flex = "1";
+  top.append(where, clock);
+  const notes = text("div", "m-notes", ""); // long notes scroll in their own place; the slides and buttons stay on screen
+  notes.style.cssText = "font-size:22px;line-height:1.35;margin:14px 0;white-space:pre-wrap";
+  // the slide on show and the next one, side by side: facing the room, the phone says what the room sees and what comes
+  const shot = () => {
+    const box = el("div"), label = text("div", "m-muted", ""), img = el("img");
+    box.style.cssText = "flex:1;min-width:0";
+    img.alt = "";
+    img.style.cssText = "display:block;width:100%;aspect-ratio:16/9;object-fit:contain;background:#000;border:1px solid var(--muted,#555);margin-top:4px";
+    box.append(label, img);
+    return { box, label, img };
+  };
+  const cur = shot(), nxt = shot(), shots = el("div", "m-row");
+  shots.style.cssText = "gap:8px;align-items:flex-start;margin:6px 0 14px";
+  shots.append(cur.box, nxt.box);
+  const picture = (s, i) => { s.img.hidden = !urls[i]; if (urls[i]) s.img.src = urls[i]; };
+  const big = (label, words) => { const b = Object.assign(text("button", "m-btn primary", label), { type: "button", onclick: () => say(words) }); b.style.cssText = "flex:1;padding:22px 0;font-size:18px"; return b; };
+  const pads = el("div", "m-row"), prev = big("PREV", "prev"), next = big("NEXT", "next");
+  prev.classList.remove("primary");
+  pads.append(prev, next);
+  const black = Object.assign(text("button", "m-btn", "BLACK"), { type: "button", onclick: () => say("black") });
+  const full = Object.assign(text("button", "m-btn", "WINDOW"), { type: "button", onclick: () => say("full") });
+  // END on the second tap, so a slip of the thumb doesn't stop the talk
+  const twice = (b, label, armedLabel, act) => {
+    let armed = null;
+    b.onclick = () => {
+      if (armed) { clearTimeout(armed); armed = null; b.textContent = label(); return act(); }
+      b.textContent = armedLabel();
+      armed = setTimeout(() => { armed = null; b.textContent = label(); }, 3000);
+    };
+  };
+  const end = Object.assign(text("button", "m-btn", "END"), { type: "button" });
+  twice(end, () => "END", () => "TAP AGAIN TO END", () => say("end"));
+  const tools = el("div", "m-row");
+  for (const b of [black, full, end]) { b.style.flex = "1"; tools.append(b); }
+  tools.style.marginTop = "10px";
+  // shows the deck at once when the desk shows none; over another talk, on the second tap
+  const start = Object.assign(text("button", "m-btn primary", "SHOW THIS DECK ON THE DESK"), { type: "button" });
+  let replacing = null;
+  start.onclick = () => {
+    if (!now?.d || replacing) { clearTimeout(replacing); replacing = null; start.textContent = "SHOW THIS DECK ON THE DESK"; return say("open " + deck.name); }
+    start.textContent = `REPLACES ${now.d}, SLIDE ${now.i} / ${now.n} — TAP AGAIN`;
+    replacing = setTimeout(() => { replacing = null; start.textContent = "SHOW THIS DECK ON THE DESK"; }, 3000);
+  };
+  const link = Object.assign(text("button", "m-btn", "CONNECT OVER BLUETOOTH"), { type: "button" });
+  const others = Object.assign(text("button", "m-btn", "OTHER DECKS"), { type: "button", onclick: () => {
+    if (!back) inside(() => APPS.slides.open());
+    slidesScreen(deckList);
+  } });
+  const said = text("div", "m-muted", "");
+  for (const b of [start, link, others]) b.style.cssText = "display:block;width:100%;margin-top:10px";
+  const urls = deck.thumbs.map(b => URL.createObjectURL(b));
+  const draw = () => {
+    const ours = now && now.d === deck.name;
+    start.hidden = ours;
+    for (const e of [pads, tools]) e.hidden = !ours;
+    link.hidden = !navigator.bluetooth || !!ble;
+    // a deck not on the desk yet shows what it opens on: its first slide and that slide's notes
+    if (!ours) {
+      where.textContent = !now ? "not connected" : now.d ? "the desk shows " + now.d : "the desk shows no deck";
+      notes.textContent = deck.notes[0] || "(no notes for this slide)";
+      cur.label.textContent = "FIRST · not on the desk yet";
+      picture(cur, 0);
+      cur.img.style.opacity = 1;
+      nxt.label.textContent = deck.count > 1 ? "NEXT · 2" : "";
+      picture(nxt, 1);
+      return;
+    }
+    where.textContent = `${now.i} / ${now.n}` + (now.b ? " · BLACK" : "") + (ble ? " · bluetooth" : " · wifi");
+    notes.textContent = deck.notes[now.i - 1] || "(no notes for this slide)";
+    notes.scrollTop = 0;
+    cur.label.textContent = "NOW · " + now.i + (now.b ? " · BLACK" : "");
+    picture(cur, now.i - 1);
+    cur.img.style.opacity = now.b ? 0.3 : 1; // blacked: dimmed here, black on the screen
+    nxt.label.textContent = now.i < now.n ? "NEXT · " + (now.i + 1) : "END OF THE DECK";
+    picture(nxt, now.i < now.n ? now.i : -1);
+    black.textContent = now.b ? "UNBLACK" : "BLACK";
+    full.textContent = now.f ? "WINDOW" : "FULL";
+  };
+  const got = s => {
+    now = shown = s;
+    if (s.d && talk?.deck !== s.d) talk = { deck: s.d, at: Date.now() };
+    if (!s.d) talk = null;
+    draw();
+  };
+  const say = words => {
+    (queue = queue.catch(() => {}).then(async () => {
+      if (ble) await bleWrite(ble.steer, ble.seal, "p " + words);
+      else { const s = await desk("/api/slides", { do: words }); got({ d: s.deck, i: s.i, n: s.n, b: s.black, f: s.full }); }
+    })).catch(e => { said.textContent = e.away ? "The desk is out of reach. Connect over Bluetooth." : (e.message || String(e)); });
+  };
+  const read = v => JSON.parse(new TextDecoder().decode(v));
+  // Bluetooth: the desk picked for the Remote, or picked here; the slide read once, then each change told
+  const join = async pick => {
+    if (pick || !device) { const d = await navigator.bluetooth.requestDevice({ filters: [{ services: [BT_SERVICE] }] }); if (d !== device) { device?.gatt.disconnect(); device = d; } }
+    said.textContent = "connecting to " + (device.name || "the desk");
+    const service = await (await device.gatt.connect()).getPrimaryService(BT_SERVICE);
+    const [s, slide] = await Promise.all([service.getCharacteristic(BT_STEER), service.getCharacteristic(BT_SLIDE)]);
+    const seal = await bleSealer(service); // after: Android's Bluetooth takes one write or read at a time
+    steer = s; steerSeal = seal;
+    slide.oncharacteristicvaluechanged = e => got(read(e.target.value));
+    await slide.startNotifications();
+    ble = { steer: s, slide, seal };
+    device.ongattserverdisconnected = () => { ble = null; steer = null; said.textContent = "Bluetooth dropped. Tap Connect, or stay on the WiFi."; draw(); };
+    got(read(await slide.readValue()));
+    said.textContent = "";
+  };
+  link.onclick = () => join(true).catch(e => { said.textContent = e.name === "NotFoundError" ? "No desk picked." : "Bluetooth: " + e.message; });
+  const rejoin = () => { if (device && !ble && !document.hidden) join(false).catch(() => {}); };
+  document.addEventListener("visibilitychange", rejoin);
+  // the WiFi, while Bluetooth isn't there: wait for the next change, as the desk's own screens do
+  (async () => {
+    while (!gone) {
+      if (ble) { await new Promise(r => setTimeout(r, 1000)); continue; }
+      try {
+        const s = await desk("/api/slides/now?after=" + seq, null, 30000);
+        seq = s.seq;
+        if (!ble && !gone) got({ d: s.deck, i: s.i, n: s.n, b: s.black, f: s.full });
+      } catch { if (!gone) await new Promise(r => setTimeout(r, 3000)); }
+    }
+  })();
+  const tick = () => { if (!talk || talk.deck !== deck.name) return void (clock.textContent = ""); const t = Math.floor((Date.now() - talk.at) / 1000); clock.textContent = Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0"); };
+  const timer = setInterval(tick, 1000);
+  teardown = () => { gone = true; clearInterval(timer); document.removeEventListener("visibilitychange", rejoin); urls.forEach(u => URL.revokeObjectURL(u)); };
+  title.textContent = deck.name;
+  slot.classList.add("presenting");
+  slot.replaceChildren(top, notes, shots, pads, tools, start, link, others, said);
+  if (shown) now = shown; // what this phone last heard, until the desk says again
+  draw();
+  tick();
+  rejoin();
+}
+
+// the decks kept on this phone; the one the desk shows is marked, a tap opens a deck's remote
+async function deckList(slot) {
+  title.textContent = "Slides";
+  const decks = (await all("decks")).sort((a, b) => a.name.localeCompare(b.name));
+  if (open !== "slides" || !slot.isConnected) return;
+  const list = el("div", "m-list");
+  for (const d of decks) {
+    const r = row(I.slides, d.name, shown?.d === d.name ? `on the desk · ${shown.i} / ${shown.n}` : d.count + " slides");
+    r.onclick = () => slidesScreen(s => present(d, s)); // back, from there: to the talk on show (or out, with none)
+    list.append(r);
+  }
+  slot.replaceChildren(decks.length ? list : note("No deck on this phone yet. Put a folder with its PDF in the desk's ~/Slides, then sync while the desk is in reach."));
+}
+
+// SLIDES | TRACKPAD on top of every screen of the Slides app: the trackpad is the only way to act on the
+// desk's screen, so it is one tap away whatever the slides are doing (the same pad as the Remote app,
+// which joins the desk this phone knows by itself). draw puts the slides' side (a deck, the list) in slot.
+let slidesTab = "slides";
+function slidesScreen(draw) {
+  const tabs = el("div", "m-row"), toPad = text("button", "m-btn", "TRACKPAD"), toSlides = text("button", "m-btn", "SLIDES");
+  for (const b of [toSlides, toPad]) { b.type = "button"; b.style.flex = "1"; tabs.append(b); }
+  tabs.style.cssText = "padding:12px 12px 0";
+  const slot = el("div", "m-pad"), screen = el("div", "m-talk");
+  const show = () => {
+    teardown?.(); teardown = null; // the screen before: its link loop, its timers
+    slot.classList.remove("presenting");
+    toPad.classList.toggle("primary", slidesTab === "pad");
+    toSlides.classList.toggle("primary", slidesTab === "slides");
+    if (slidesTab === "pad") steerDesk(slot); else draw(slot);
+  };
+  toPad.onclick = () => { slidesTab = "pad"; show(); };
+  toSlides.onclick = () => { slidesTab = "slides"; show(); };
+  screen.append(tabs, slot);
+  body.replaceChildren(screen);
+  show();
+}
+
+// The memo being recorded, one at a time. The screen is kept on while it records: a phone that
+// sleeps may stop the microphone. show is told the seconds so far and how loud it is now (0 to 1).
+let rec = null;
+const mmss = s => Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0");
+async function startMemo(show) {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const type = ["audio/webm;codecs=opus", "audio/mp4", "audio/ogg;codecs=opus"].find(t => MediaRecorder.isTypeSupported(t));
+  // 24 kbps, about 180 KB a minute: Opus at 16–32 kbps transcribes as well as the browser's ~129 kbps (Gab's
+  // test on the board, 2026-10-17), for a quarter of the upload and of the writes to the SD card
+  const recorder = new MediaRecorder(stream, { ...(type ? { mimeType: type } : {}), audioBitsPerSecond: 24000 }), chunks = [];
+  recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+  const ctx = new AudioContext(), meter = ctx.createAnalyser(), samples = new Float32Array(1024);
+  meter.fftSize = 1024;
+  ctx.createMediaStreamSource(stream).connect(meter);
+  ctx.resume().catch(() => {}); // some browsers make it suspended, and the meter would stay still
+  const lock = await navigator.wakeLock?.request("screen").catch(() => null);
+  rec = { recorder, stream, chunks, ctx, lock, at: Date.now(), done: new Promise(ok => { recorder.onstop = ok; }) };
+  recorder.start(1000); // a piece each second
+  const it = rec, frame = () => {
+    if (rec !== it) return;
+    meter.getFloatTimeDomainData(samples);
+    let sum = 0;
+    for (const s of samples) sum += s * s;
+    show((Date.now() - it.at) / 1000, Math.min(1, Math.sqrt(sum / samples.length) * 5));
+    requestAnimationFrame(frame);
+  };
+  frame();
+}
+// stops the recording and keeps it on the phone (not yet for the desk)
+async function stopMemo() {
+  const r = rec;
+  if (!r) return;
+  rec = null;
+  const seconds = (Date.now() - r.at) / 1000;
+  r.recorder.stop();
+  await r.done;
+  r.stream.getTracks().forEach(t => t.stop());
+  r.ctx.close();
+  r.lock?.release().catch(() => {});
+  if (r.chunks.length) await put("memos", { at: r.at, seconds, blob: new Blob(r.chunks, { type: r.recorder.mimeType || "audio/webm" }), keep: false });
+}
+// the file's name in the desk's inbox; the desk names the memo by its time and its first sentence
+const size = n => n < 1e6 ? Math.max(1, Math.round(n / 1e3)) + " KB" : (n / 1e6).toFixed(n < 1e7 ? 1 : 0) + " MB";
+function memoName(m) {
+  const d = new Date(m.at), p = n => String(n).padStart(2, "0");
+  return `memo ${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}`
+    + (/mp4|aac/.test(m.blob.type) ? ".m4a" : /ogg/.test(m.blob.type) ? ".ogg" : ".webm");
+}
+
+function confirmRemove(r, key) {
+  if (armed === key) { armed = null; return true; }
+  armed = key;
+  r.querySelector(".sub").textContent = "tap again to remove";
+  setTimeout(() => { if (armed === key) armed = null; }, 3000);
+  return false;
+}
+
+// ---- springboard + dock ----
+function tile(id) {
+  const b = el("button", "app-tile"), glyph = el("span", "glyph", APPS[id].glyph);
+  if (id === "share" || id === "memos" || id === "notes") { const n = Object.assign(el("span", "tile-badge"), { hidden: true }); n.dataset.app = id; glyph.append(n); }
+  b.append(glyph, text("span", "label", APPS[id].name));
+  b.onclick = () => openApp(id);
+  return b;
+}
+for (const id of Object.keys(APPS).filter(id => !APPS[id].needs || APPS[id].needs())) {
+  document.getElementById("grid").append(tile(id));
+  if (APPS[id].dock !== false) document.getElementById("dock-tiles").append(tile(id));
+}
+async function badges() {
+  const n = { share: (await all("waiting")).length + (await all("files")).length, memos: (await all("memos")).filter(m => m.keep).length,
+    notes: (await all("notes")).filter(n => n.keep).length }; // links and files waiting, memos and notes kept for the desk
+  for (const b of document.querySelectorAll(".tile-badge")) { b.hidden = !n[b.dataset.app]; b.textContent = n[b.dataset.app]; }
+}
+
+// ---- status bar: the clock, and whether the desk is in reach (a tap asks again and syncs) ----
+const clock = document.getElementById("clock"), conn = document.getElementById("conn"), connLabel = document.getElementById("conn-label");
+const tick = () => { const d = new Date(); clock.textContent = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); };
+tick(); setInterval(tick, 15000);
+let wasOnline = null;
+async function ping() {
+  let online = false;
+  for (const viaCable of cable ? [true, false] : [false, true]) { // the way that worked last, then the other
+    if (viaCable && !await knock([CABLE], 1500)) continue;
+    cable = viaCable;
+    try { hello = await desk("/api/hello"); online = true; break; } catch { /* away this way */ } // open to all: in reach, owned or not
+  }
+  if (!online) { cable = false; hello = null; }
+  claimCard();
+  screensCard();
+  conn.className = "conn " + (online ? "online" : "offline");
+  connLabel.textContent = online ? "desk" : "offline";
+  if (online && wasOnline !== true) sync(false); // the desk came in reach: hand over, bring back
+  wasOnline = online;
+}
+conn.onclick = async () => { await ping(); if (wasOnline) sync(true); else toast("The desk is out of reach", false); };
+setInterval(() => { if (!document.hidden) ping(); }, 15000);
+follow();
+document.addEventListener("visibilitychange", () => { if (!document.hidden) ping(); });
+
+// ---- start: what was shared from another app. The service worker kept it (files, a link) and opens the page
+// with ?shared=&links=; an older install still sends a link in the address (?url=, the GET share target) ----
+(async () => {
+  if (history.state?.pane) history.replaceState(null, ""); // a reload opens on the home screen
+  navigator.serviceWorker?.register("sw.js").catch(() => {});
+  navigator.storage?.persist?.(); // ask the phone not to clean the articles away
+  const got = new URLSearchParams(location.search);
+  if (got.has("shared")) {
+    const files = +got.get("shared") || 0, links = +got.get("links") || 0;
+    history.replaceState(null, "", location.pathname);
+    toast(files || links ? "Kept for the desk" + (files > 1 ? " — " + files + " files" : "") : "Nothing could be kept", !!(files || links));
+    openApp("share"); // the desk in reach: ping() below hands it over
+  }
+  const link = /https?:\/\/\S+/.exec([got.get("url"), got.get("text")].filter(Boolean).join(" "));
+  if (link) {
+    await put("waiting", { url: link[0], title: (got.get("title") || "").trim(), at: Date.now() });
+    history.replaceState(null, "", location.pathname); // a reload doesn't add it twice
+    toast("Kept for the desk", true);
+    openApp("share");
+  }
+  // opened by a desk's QR code (the claim by QR code, Gab 2026-11-23): where the desk is, and the code its screen shows;
+  // out of the address at once, so a reload or a shared link doesn't carry it
+  const brought = new URLSearchParams(location.hash.slice(1));
+  if (brought.has("claim") && brought.has("desk")) {
+    history.replaceState(null, "", location.pathname + location.search);
+    await put("settings", brought.get("desk"), "desk");
+    await put("settings", { code: brought.get("claim"), desk: brought.get("desk"), board: brought.get("board"), until: Date.now() + 9 * 60000 }, "claim-code");
+  }
+  badges();
+  await ping();
+  // the first visit, or a desk's QR code: install first (a modal, Gab: "the client app need to have a modal to let …
+  // the app be installed on the phone"), then the claim, here or, on an iPhone, in the installed app
+  const claiming = !!await broughtCode(), first = !await setting("install-asked");
+  if (!installed() && (claiming || first)) {
+    await put("settings", Date.now(), "install-asked");
+    await installSheet(claiming);
+  }
+  if (claiming && !(ios && !installed())) {
+    if (hello?.claimed === false) askClaim();
+    else if (!hello) toast("The desk doesn't answer at " + (await broughtCode()).desk + ". Is this phone on the same WiFi as the desk?", false);
+  }
+})();

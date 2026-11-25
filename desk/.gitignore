@@ -1,0 +1,7 @@
+home/
+__pycache__/
+*.pyc
+board/image/
+board/*.local
+bench/clips/
+.trust/

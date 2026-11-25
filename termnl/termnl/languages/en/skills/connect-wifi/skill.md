@@ -1,0 +1,48 @@
+---
+does: connect wifi
+label: join a Wi-Fi network
+admin: no
+approve: yes
+waits: 60
+---
+
+## People say
+
+- connect to (the) {network} (wifi)
+- connect to (the) wifi (called/named) {network}
+- connect to (a/the) wifi
+- connect to (a/the) "network"
+
+## Also said
+
+- add a new wifi network
+- add a wifi network
+- join cafe-guest
+- get me on the home-5g network, I have the password
+- log into the cafe-guest Wi-Fi with the password they gave me
+- switch to the home-5g wifi
+- I'm at the café, please hook me up to cafe-guest
+- connect wifi home-5g with password
+- use the cafe-guest network, here's the password
+- connect me to cafe-guest
+- can you join the home-5g wifi
+- I'd like to get online through cafe-guest
+- hop on home-5g
+- join the wifi
+- log me onto home-5g, I know the password
+- please connect to the cafe-guest network so I can work from here
+- is there a way to get onto cafe-guest
+
+## What it needs
+
+- {network}: a network around. If it's missing, ask: Which network? | Which Wi-Fi should I join?
+- {password}: a secret. If it's missing, ask: What's the password? | What's the Wi-Fi password?
+
+## Command
+
+termnl-wifi join {network}
+
+## Replies
+
+- approve: Join {network}? If you're reaching me over another network, we may lose the connection.
+- done: Connected to {network}. | Done, I'm on {network}.
