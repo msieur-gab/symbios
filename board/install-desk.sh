@@ -54,8 +54,8 @@ setting() {  # setting <name> <value>: into LOCAL, replacing the name's line
   sed -i "/^$1 = /d" "$LOCAL"; echo "$1 = $2" >> "$LOCAL"
 }
 if [ -n "${COMPANION:-}" ]; then
-  [[ "$COMPANION" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?(\ https://[A-Za-z0-9.-]+(:[0-9]+)?)*$ ]] \
-    || { echo "COMPANION: one or more https:// addresses, with no path (https://my-companion.example.org)"; exit 1; }
+  [[ "$COMPANION" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~/-]*)?(\ https://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~/-]*)?)*$ ]] \
+    || { echo "COMPANION: one or more https:// addresses (https://my-companion.netlify.app, https://<you>.github.io/symbios)"; exit 1; }
   setting companion "$COMPANION"
 fi
 # Heavy jobs' memory, set once from the board's own: the desk's defaults are for 2 GB; a 1 or 1.5 GB Orange Pi Zero 2W

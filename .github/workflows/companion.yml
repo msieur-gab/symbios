@@ -1,0 +1,31 @@
+# Publishes the companion (the phone's page, companion/) on this repository's GitHub Pages, at
+# https://<you>.github.io/<this repository>/. In your fork: Settings > Pages > Source: GitHub Actions, then the
+# Actions tab > enable, then run "companion" once (or push). Give that address to the desk's installer:
+#     COMPANION=https://<you>.github.io/symbios
+# Every Pages site of one account shares one address for the browser: see the README, "The companion".
+name: companion
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: companion
+      - id: deploy
+        uses: actions/deploy-pages@v4

@@ -37,19 +37,27 @@ data, and an **Android phone with Chrome** (iPhones are not tested yet).
 
 Your phone keeps the key that owns your board, inside the companion page. The key never leaves the phone, but
 whoever controls the site that serves the page controls what can use that key. So each person hosts their own copy,
-at an address of its own, over HTTPS (a phone only installs a page from there):
+over HTTPS (a phone only installs a page from there), in one of two ways:
 
-- **Netlify Drop**, the quickest: drag the `companion/` folder onto [app.netlify.com/drop](https://app.netlify.com/drop)
-  and keep the address it gives you (`https://<name>.netlify.app`).
-- **Cloudflare Pages** works the same way.
-- **GitHub Pages**, only on an account that publishes nothing else: every Pages site of an account shares one address
-  (`https://<you>.github.io`), so any of them could use your key.
+- **GitHub Pages**, the easiest once you have forked this repository: in your fork, **Settings → Pages → Source:
+  GitHub Actions**, then the **Actions** tab → enable, then run **companion** once. Your companion is then at
+  `https://<you>.github.io/symbios/`, published again by itself at every push. One thing to know: every Pages site of
+  one account shares one address for the browser (`https://<you>.github.io`), so any other page you publish on Pages
+  could use your key too. Fine if they are all yours and trusted; for full separation, use a GitHub account or
+  organisation for this alone, or Netlify.
+- **Netlify Drop**, an address of its own: drag the `companion/` folder onto
+  [app.netlify.com/drop](https://app.netlify.com/drop) and keep the address it gives you (`https://<name>.netlify.app`).
+  Cloudflare Pages works the same way.
+
+Whichever you choose, the board learns the address once, when the desk is installed (`COMPANION=…`, below), and its
+claim QR code opens it.
 
 Never delete that site while your board names it: someone else could take the freed name.
 
 ## Installing on an Orange Pi Zero 2W
 
-Everything below is run from the laptop, in this folder.
+Everything below is run from the laptop, in this folder. The installers and the code are copied to the board into a
+hidden folder, `~/.symbios-install`, so they never show among your files; your WiFi file is never copied.
 
 1. **The card, the WiFi, the first login and the base layer**: follow `board/README.md`, steps 1 to 5. The card is
    written with your WiFi and your SSH key on it; SSH then takes keys only, a firewall leaves only SSH and the desk
@@ -59,16 +67,13 @@ Everything below is run from the laptop, in this folder.
    `write-card.sh` checks it before writing.
 2. **TermNL**:
    ```
-   ssh <user>@<address> mkdir -p symbios-src
-   rsync -a --delete termnl/ <user>@<address>:symbios-src/termnl/
-   rsync -a board/ <user>@<address>:symbios-board/
-   ssh -t <user>@<address> sudo symbios-board/install-termnl.sh symbios-src/termnl
+   rsync -a --delete --exclude .git --exclude netplan ./ <user>@<address>:.symbios-install/
+   ssh -t <user>@<address> sudo .symbios-install/board/install-termnl.sh .symbios-install/termnl
    ssh <user>@<address> termnl how much space is left
    ```
 3. **The desk**, with your companion's address:
    ```
-   rsync -a --delete desk/ <user>@<address>:symbios-src/desk/
-   ssh -t <user>@<address> sudo COMPANION=https://<your companion> symbios-board/install-desk.sh symbios-src/desk
+   ssh -t <user>@<address> sudo COMPANION=https://<your companion> .symbios-install/board/install-desk.sh .symbios-install/desk
    ```
    It installs the kiosk browser and downloads the speech and search models (about 300 MB, from their own
    sources), so give it time. Run it again to update; the address is remembered. The same models are kept in the

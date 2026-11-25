@@ -52,8 +52,8 @@ setting() {  # setting <name> <value>: into LOCAL, replacing the name's line
   sed -i "/^$1 = /d" "$LOCAL"; echo "$1 = $2" >> "$LOCAL"
 }
 if [ -n "${COMPANION:-}" ]; then
-  [[ "$COMPANION" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?(\ https://[A-Za-z0-9.-]+(:[0-9]+)?)*$ ]] \
-    || { echo "COMPANION: one or more https:// addresses, with no path (https://my-companion.example.org)"; exit 1; }
+  [[ "$COMPANION" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~/-]*)?(\ https://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~/-]*)?)*$ ]] \
+    || { echo "COMPANION: one or more https:// addresses (https://my-companion.netlify.app, https://<you>.github.io/symbios)"; exit 1; }
   setting companion "$COMPANION"
 fi
 if [ -s "$LOCAL" ]; then

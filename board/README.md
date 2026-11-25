@@ -64,8 +64,8 @@ Then give the user your key: `ssh root@<address> 'install -d -m 700 -o <user> -g
 ## 5. The base layer
 
 ```
-rsync -a board/ <user>@<address>:symbios-board/
-ssh -t <user>@<address> sudo symbios-board/install-base.sh
+rsync -a --delete --exclude .git --exclude netplan ./ <user>@<address>:.symbios-install/
+ssh -t <user>@<address> sudo .symbios-install/board/install-base.sh
 ```
 
 SSH by key only (root too), a firewall (the USB cable open, on the WiFi only SSH and the desk), Armbian's
@@ -78,11 +78,8 @@ Keep an SSH session open while it runs, in case the new SSH settings refuse you.
 From the laptop, a copy of TermNL (its `symbios` branch, without its history) and which commit it is:
 
 ```
-ssh <user>@<address> mkdir -p symbios-src
-rsync -a --delete --exclude .git --exclude logs --exclude __pycache__ termnl/ <user>@<address>:symbios-src/termnl/
-git -C termnl log -1 --format='%h %s' | ssh <user>@<address> 'cat > symbios-src/termnl/COMMIT'
-rsync -a board/ <user>@<address>:symbios-board/
-ssh -t <user>@<address> sudo symbios-board/install-termnl.sh symbios-src/termnl
+rsync -a --delete --exclude .git --exclude netplan ./ <user>@<address>:.symbios-install/
+ssh -t <user>@<address> sudo .symbios-install/board/install-termnl.sh .symbios-install/termnl
 ```
 
 TermNL in `/opt/symbios/termnl` (read-only), a service at boot answering only on

@@ -27,6 +27,7 @@ import stat
 import subprocess
 import sys
 import threading
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -327,9 +328,12 @@ if __name__ == "__main__":
     if unknown:
         sys.exit("unknown group: " + ", ".join(sorted(unknown)))
     config.TALK = Below(TERMNL) if stat.S_ISSOCK(os.stat(TERMNL).st_mode) else talk(TERMNL)
-    config.COMPANION = set(args.companion.split()) - {"none"}
-    # the QR code's link opens the first companion desk.conf names (the others may only call the desk)
-    config.COMPANION_HOME = next((c.rstrip("/") for c in args.companion.split() if c != "none"), None)
+    # a companion may live under a path (GitHub Pages: https://<you>.github.io/symbios/): the browser's Origin, which
+    # the desk checks, is its scheme and host only; the QR code's link opens the whole address of the first one
+    # desk.conf names (the others may only call the desk)
+    homes = [c.rstrip("/") for c in args.companion.split() if c != "none"]
+    config.COMPANION = {"%s://%s" % (u.scheme, u.netloc) for u in map(urllib.parse.urlsplit, homes)}
+    config.COMPANION_HOME = homes[0] if homes else None
     try:
         SHELL = config.SHELL = [] if args.shell == "off" else [ipaddress.ip_network(n) for n in args.shell.split(",") if n]
     except ValueError as e:
