@@ -1,8 +1,8 @@
 """python3 -m tests.real [-v] [--add] — the conversations people really had, against today's TermNL.
 
 tests/real.md holds them (kept out of git, like logs/): each turn, what was typed, what TermNL did
-then, and what it should do. "should (Claude):" is Claude's guess, for the person to confirm (remove
-"(Claude)") or correct; "should:" alone is theirs.
+then, and what it should do. "should (guess):" is a guess, for the person to confirm (remove
+"(guess)") or correct; "should:" alone is theirs.
 
     --add   adds the conversations in logs/ that real.md doesn't have yet, without a "should"
     -v      every turn, not only those that differ
@@ -65,13 +65,13 @@ def parse(text):
         elif line.startswith("- you: ") and conversations:
             conversations[-1]["turns"].append({"you": line[7:]})
         elif conversations and conversations[-1]["turns"]:
-            m = re.match(r"^\s+- (then|should|should \(Claude\)): (.*)$", line)
+            m = re.match(r"^\s+- (then|should|should \(guess\)): (.*)$", line)
             if m:
                 turn = conversations[-1]["turns"][-1]
                 key = "then" if m.group(1) == "then" else "should"
                 turn[key] = m.group(2).strip()
                 if key == "should":
-                    turn["by"] = "Claude" if "Claude" in m.group(1) else "person"
+                    turn["by"] = "guess" if "guess" in m.group(1) else "person"
     return home, conversations
 
 
@@ -99,10 +99,10 @@ def judge(should, r):
 
 
 def replay(verbose=False):
-    """→ {"person": [as said, judged], "Claude": [...], "not judged": n}"""
+    """→ {"person": [as said, judged], "guess": [...], "not judged": n}"""
     with open(HERE, encoding="utf-8") as f:
         start, conversations = parse(f.read())
-    tally = {"person": [0, 0], "Claude": [0, 0], "not judged": 0}
+    tally = {"person": [0, 0], "guess": [0, 0], "not judged": 0}
     home = tempfile.mkdtemp(prefix="termnl-real-")
     try:
         for p in start:
@@ -138,14 +138,14 @@ def replay(verbose=False):
 
 
 def summary(tally):
-    p, c = tally["person"], tally["Claude"]
-    return ("Real conversations: %d of %d turns as the person said, %d of %d as Claude guessed, %d not judged yet"
+    p, c = tally["person"], tally["guess"]
+    return ("Real conversations: %d of %d turns as the person said, %d of %d as guessed, %d not judged yet"
             % (p[0], p[1], c[0], c[1], tally["not judged"]))
 
 
 def is_person(session):
     """the chat page names a conversation with a random id, the desk's Assistant with "s" and random letters and
-    digits (both cut to 8 in the log); tests name theirs by hand (claude-…, check-…)"""
+    digits (both cut to 8 in the log); tests name theirs by hand (test-…, check-…)"""
     return re.match(r"^([0-9a-f]{8}|s[0-9a-z]{7})$", session) is not None
 
 

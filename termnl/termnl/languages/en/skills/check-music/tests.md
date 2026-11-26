@@ -1,6 +1,6 @@
 # Tests: check-music
 
-Sentences people would say for this skill, never trained on. Written by Claude on 31 Oct 2026 (not blind: the
+Sentences people would say for this skill, never trained on. Written on 31 Oct 2026 (not blind: the
 same session wrote the skill). `python3 -m tests.measure skills`
 
 - what song is playing

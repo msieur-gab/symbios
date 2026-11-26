@@ -55,7 +55,7 @@ How to read it:
 - **Peak memory** next to the board's total says whether base fits beside the desk, the kiosk
   and the rest.
 
-## For a Claude Code session on the board
+## For a session on the board
 
 Run the steps above, with these in mind:
 

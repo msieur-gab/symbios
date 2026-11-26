@@ -20,7 +20,7 @@ import trust
 # (Gab, 2026-10-27: "hdmi plug need phone approval", "wifi requires phone as well to unlock"). Allowed, it gets a pass
 # (a cookie, HttpOnly, SameSite=Strict) kept here in memory, so a restart ends every pass; it is also bound to the
 # screen's address. The HDMI kiosk's pass ends when the screen is unplugged, a cable laptop's when the cable comes out
-# (watch_screens), a WiFi laptop's after WIFI_PASS seconds (Claude's default, changeable).
+# (watch_screens), a WiFi laptop's after WIFI_PASS seconds (a default, changeable).
 SCREENS = {}   # pass → {"id", "kind", "ip", "since", "until", "era"}; the id names it to the phone, which never sees the pass;
                # era: who owned the desk when it was allowed (trust.era): a takeover or the reset ends it
 WAITING = {}   # id → {"code", "kind", "ip", "since", "state": waiting | allowed | refused, "pass"}

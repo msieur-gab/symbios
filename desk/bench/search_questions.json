@@ -1,5 +1,5 @@
 {
-  "note": "Questions for search_bench.py eval, 2026-10-23. 'right' = file-name starts of the articles and memos that should come back; Claude's labels, made from titles and greps of the 20 articles and 13 memos on the board, not from any search result. Near-misses are topics the board covers whose answer it doesn't hold (grep-checked absent).",
+  "note": "Questions for search_bench.py eval, 2026-10-23. 'right' = file-name starts of the articles and memos that should come back; Labels made from titles and greps of the 20 articles and 13 memos on the board, not from any search result. Near-misses are topics the board covers whose answer it doesn't hold (grep-checked absent).",
   "questions": [
     {"kind": "answerable", "q": "does AI impact democracy?", "right": ["how-ai-threatens-democracy", "work-in-progress-how-to-strengthen-democratic", "4-a-roadmap-for-action"]},
     {"kind": "answerable", "q": "what is designing by abstention?", "right": ["2026-10-19 20-59", "2026-10-19 21-08", "designing-for-non-determinism"]},

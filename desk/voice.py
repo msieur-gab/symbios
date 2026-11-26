@@ -78,7 +78,6 @@ corrections.jsonl: material to train a small corrector later, if one is needed (
 | gig repository     | git repository  |
 | parroting system   | operating system|
 | ChPT               | ChatGPT         |
-| cloud API          | Claude API      |
 | web pee            | WebP            |
 """
 EVERY = 10  # seconds between two looks at the inbox

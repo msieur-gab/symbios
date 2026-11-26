@@ -1,5 +1,5 @@
 {
-  "note": "Questions for split_test.py, 2026-10-23 (Gab: \"test with additional questions pointing to newly embedded paragraphs\"). Each answer sits only in the part of a paragraph beyond MiniLM's 256 tokens, which the board never embedded before. Claude's labels, written from that cut-off text and reworded so the question doesn't repeat it.",
+  "note": "Questions for split_test.py, 2026-10-23 (Gab: \"test with additional questions pointing to newly embedded paragraphs\"). Each answer sits only in the part of a paragraph beyond MiniLM's 256 tokens, which the board never embedded before. Labels written from that cut-off text and reworded so the question doesn't repeat it.",
   "questions": [
     {"kind": "answerable", "q": "a protest against Elon Musk's data center near Black neighborhoods in Memphis", "right": ["4-a-roadmap-for-action"]},
     {"kind": "answerable", "q": "nurses protesting hospitals that push unproven AI instead of safe staffing", "right": ["4-a-roadmap-for-action"]},
