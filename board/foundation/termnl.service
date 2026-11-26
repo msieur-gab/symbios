@@ -8,6 +8,8 @@ User=__USER__
 Environment=TERMNL_DATA=__HOME__/.config/termnl
 # the program in /opt is read-only: no bytecode written there (install-termnl.sh compiles it once)
 Environment=PYTHONDONTWRITEBYTECODE=1
+# numpy for learning (install-termnl.sh); the trainer TermNL starts inherits it
+Environment=PYTHONPATH=/opt/symbios/termnl-python
 # the user's sound (pactl) for the volume skills
 Environment=XDG_RUNTIME_DIR=/run/user/__UID__
 WorkingDirectory=/opt/symbios/termnl

@@ -16,6 +16,7 @@ USER_ID="$(id -u "$USER_NAME")"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 F="$HERE/foundation"
 OPT=/opt/symbios/termnl
+NP=/opt/symbios/termnl-python   # numpy, for TermNL's learning only (below)
 DATA="$USER_HOME/.config/termnl"
 
 echo "== TermNL in $OPT, read-only"
@@ -28,6 +29,25 @@ python3 -m compileall -q "$OPT/termnl"
 # which TermNL this is: its git commit, or the COMMIT file the copy from the laptop carries (README.md)
 (cd "$SRC" && git log -1 --format='%h %s' 2>/dev/null || cat "$SRC/COMMIT" 2>/dev/null || echo "unknown") | cut -c1-100 > "$OPT/COMMIT"
 echo "   TermNL $(cat "$OPT/COMMIT")"
+
+echo "== numpy for TermNL's learning, in $NP (read-only)"
+# Recognising needs only the standard library; training ("learn what I taught you") needs numpy. Not Debian's (the
+# desk's note: "Debian's crash on this board"): PyPI's file, its sha256 checked, unpacked, as the board has no pip.
+# TermNL's own, below the desk: the desk's copy in ~/.models/shared/python comes a layer later and is the desk's.
+# (Until 26 Nov no installer gave TermNL numpy: "learn" said it was starting and stopped at "No module named numpy".)
+NP_VER=2.5.3; NP_WHL=numpy-$NP_VER-cp313-cp313-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl
+if [ ! -d "$NP/numpy-$NP_VER.dist-info" ]; then
+  rm -rf "$NP.new"; install -d -m 0755 "$NP.new"
+  read -r url sum < <(curl -fsSL "https://pypi.org/pypi/numpy/$NP_VER/json" | python3 -c 'import json, sys
+f = [u for u in json.load(sys.stdin)["urls"] if u["filename"] == sys.argv[1]][0]
+print(f["url"], f["digests"]["sha256"])' "$NP_WHL")
+  curl -fsSL -o "$NP.new/$NP_WHL" "$url"
+  echo "$sum  $NP.new/$NP_WHL" | sha256sum -c --quiet
+  python3 -m zipfile -e "$NP.new/$NP_WHL" "$NP.new"; rm "$NP.new/$NP_WHL"
+  chown -R root:root "$NP.new"; chmod -R go-w "$NP.new"
+  rm -rf "$NP"; mv "$NP.new" "$NP"
+fi
+sudo -u "$USER_NAME" env PYTHONPATH="$NP" python3 -c 'import numpy; print("   numpy", numpy.__version__)'
 
 echo "== the person's own files in $DATA"
 sudo -u "$USER_NAME" mkdir -p "$DATA"
