@@ -16,16 +16,23 @@ concurrency:
   group: pages
   cancel-in-progress: true
 jobs:
-  publish:
+  # Two jobs, as in GitHub's own Pages template: the package is made in one and published in the next. In a single
+  # job the publishing step sometimes asked for the package before GitHub listed it ("No artifacts named
+  # github-pages", twice in the first runs); the gap between two jobs is much longer than that.
+  pack:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
           path: companion
+  publish:
+    needs: pack
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
       - id: deploy
         uses: actions/deploy-pages@v4
